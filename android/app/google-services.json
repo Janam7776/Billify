@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "268359623914",
+    "project_id": "billify-001",
+    "storage_bucket": "billify-001.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:268359623914:android:455bcfde574c66c2062393",
+        "android_client_info": {
+          "package_name": "com.billify.app.billify"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB9z5r1OctF5XcmUme9v6_ANeL1_um7mVs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
