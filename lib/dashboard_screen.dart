@@ -13,7 +13,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
-import 'main.dart' show BillifyColors, AppRoutes, BillifyDrawer, AppSettings,
+import 'main.dart' show BillifyColors, AppRoutes, BillifyDrawer, AppSettings, BillifyC,
 BillifyDialog;
 import 'expense_screens.dart' show ExpenseListScreen, AddExpenseScreen;
 
@@ -198,7 +198,7 @@ class DashboardScreen extends StatelessWidget {
         }
       },
       child: Scaffold(
-        backgroundColor: BillifyColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         drawer: const BillifyDrawer(activeRoute: AppRoutes.dashboard),
 
         // ── AppBar ──
@@ -207,7 +207,7 @@ class DashboardScreen extends StatelessWidget {
           elevation: 0,
           leading: Builder(
             builder: (ctx) => IconButton(
-              icon: const Icon(Icons.menu_rounded, color: Colors.white),
+              icon: Icon(Icons.menu_rounded, color: Colors.white),
               onPressed: () => Scaffold.of(ctx).openDrawer(),
             ),
           ),
@@ -218,7 +218,7 @@ class DashboardScreen extends StatelessWidget {
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+              icon: Icon(Icons.notifications_outlined, color: Colors.white),
               onPressed: () {},
             ),
           ],
@@ -503,7 +503,7 @@ class _SummaryCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color:        Colors.white,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -530,7 +530,7 @@ class _SummaryCard extends StatelessWidget {
                 ),
                 if (onTap != null)
                   Icon(Icons.chevron_right_rounded,
-                      size: 16, color: BillifyColors.textSecondary.withOpacity(0.5)),
+                      size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5)),
               ],
             ),
             // Values
@@ -544,14 +544,14 @@ class _SummaryCard extends StatelessWidget {
                   style: GoogleFonts.poppins(
                     fontSize:   15,
                     fontWeight: FontWeight.w700,
-                    color:      BillifyColors.textPrimary,
+                    color:      Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 Text(
                   label,
                   style: GoogleFonts.nunito(
                     fontSize: 12,
-                    color:    BillifyColors.textSecondary,
+                    color:    Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -581,7 +581,7 @@ class _BarChartCard extends StatelessWidget {
       margin:  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       decoration: BoxDecoration(
-        color:        Colors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -602,7 +602,7 @@ class _BarChartCard extends StatelessWidget {
                 style: GoogleFonts.poppins(
                   fontSize:   15,
                   fontWeight: FontWeight.w600,
-                  color:      BillifyColors.textPrimary,
+                  color:      Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const Spacer(),
@@ -625,7 +625,7 @@ class _BarChartCard extends StatelessWidget {
                   drawVerticalLine:   false,
                   horizontalInterval: chartMax / 4,
                   getDrawingHorizontalLine: (_) => FlLine(
-                    color:       BillifyColors.divider,
+                    color: Theme.of(context).dividerColor,
                     strokeWidth: 1,
                   ),
                 ),
@@ -647,7 +647,7 @@ class _BarChartCard extends StatelessWidget {
                             bars[idx].label,
                             style: GoogleFonts.nunito(
                               fontSize: 12,
-                              color:    BillifyColors.textSecondary,
+                              color:    Theme.of(context).colorScheme.onSurfaceVariant,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -685,7 +685,7 @@ class _BarChartCard extends StatelessWidget {
                       return BarTooltipItem(
                         '$label\n${fmt.format(rod.toY)}',
                         GoogleFonts.nunito(
-                          color:      Colors.white,
+                          color: Colors.white,
                           fontWeight: FontWeight.w600,
                           fontSize:   12,
                         ),
@@ -718,7 +718,7 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 4),
         Text(label,
             style: GoogleFonts.nunito(
-                fontSize: 12, color: BillifyColors.textSecondary)),
+                fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ],
     );
   }
@@ -746,7 +746,7 @@ class _RecentInvoicesSection extends StatelessWidget {
                 'Recent Invoices',
                 style: GoogleFonts.poppins(
                   fontSize: 16, fontWeight: FontWeight.w600,
-                  color: BillifyColors.textPrimary,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const Spacer(),
@@ -818,7 +818,9 @@ IconData invoiceStatusIcon(String s) {
 Future<void> showStatusPicker(BuildContext context, String invoiceId, String current) async {
   final statuses = ['draft', 'unpaid', 'paid', 'overdue'];
   await showModalBottomSheet(
-    context: context,
+    context:          context,
+    isScrollControlled: true,   // lets sheet taller than 50% of screen
+    useSafeArea:      true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
@@ -880,150 +882,168 @@ class _StatusPickerSheetState extends State<_StatusPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(
-                    color: BillifyColors.divider,
-                    borderRadius: BorderRadius.circular(2),
+    // Cap total sheet height at 85% of screen so it never overflows
+    final maxHeight = MediaQuery.of(context).size.height * 0.85;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle bar
+                Center(
+                  child: Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).dividerColor,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 18),
+                const SizedBox(height: 18),
 
-              // Title
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(9),
-                    decoration: BoxDecoration(
-                      color: BillifyColors.primary.withOpacity(0.09),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.swap_horiz_rounded,
-                        color: BillifyColors.primary, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Change Status',
-                          style: GoogleFonts.poppins(
-                              fontSize: 16, fontWeight: FontWeight.w700,
-                              color: BillifyColors.textPrimary)),
-                      Text('Select a status below, then tap Apply',
-                          style: GoogleFonts.nunito(
-                              fontSize: 12, color: BillifyColors.textSecondary)),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-
-              // Status options
-              ...widget.statuses.map((s) {
-                final isActive = _selected == s;
-                return GestureDetector(
-                  onTap: () => setState(() => _selected = s),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? invoiceStatusBg(s)
-                          : BillifyColors.background,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isActive
-                            ? invoiceStatusColor(s)
-                            : BillifyColors.divider,
-                        width: isActive ? 2 : 1,
+                // Title
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: BillifyColors.primary.withOpacity(0.09),
+                        borderRadius: BorderRadius.circular(12),
                       ),
+                      child: const Icon(Icons.swap_horiz_rounded,
+                          color: BillifyColors.primary, size: 20),
                     ),
-                    child: Row(
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: invoiceStatusBg(s),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(invoiceStatusIcon(s),
-                              color: invoiceStatusColor(s), size: 16),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Text(
-                            s[0].toUpperCase() + s.substring(1),
+                        Text('Change Status',
                             style: GoogleFonts.poppins(
-                              fontSize:   14,
-                              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                              color: isActive
-                                  ? invoiceStatusColor(s)
-                                  : BillifyColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        if (isActive)
-                          Icon(Icons.check_circle_rounded,
-                              color: invoiceStatusColor(s), size: 20),
-                        if (s == widget.current && !isActive)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: BillifyColors.divider,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text('current',
-                                style: GoogleFonts.nunito(
-                                    fontSize: 10,
-                                    color: BillifyColors.textSecondary,
-                                    fontWeight: FontWeight.w600)),
-                          ),
+                                fontSize: 16, fontWeight: FontWeight.w700,
+                                color: Theme.of(context).colorScheme.onSurface)),
+                        Text('Select a status, then tap Apply',
+                            style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ],
                     ),
-                  ),
-                );
-              }),
-
-              const SizedBox(height: 4),
-
-              // Apply button
-              const SizedBox(height: 4),
-              _saving
-                  ? const Center(
-                  child: CircularProgressIndicator(color: BillifyColors.primary))
-                  : ElevatedButton.icon(
-                onPressed: _apply,
-                icon:  const Icon(Icons.check_rounded),
-                label: Text('Apply',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _selected == widget.current
-                      ? BillifyColors.textSecondary
-                      : invoiceStatusColor(_selected),
-                  minimumSize: const Size(double.infinity, 52),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  elevation: 0,
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 18),
+
+                // Status options — Flexible so they shrink when space is tight
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: widget.statuses.map((s) {
+                        final isActive = _selected == s;
+                        return GestureDetector(
+                          onTap: () => setState(() => _selected = s),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 13),
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? invoiceStatusBg(s)
+                                  : Theme.of(context).scaffoldBackgroundColor,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: isActive
+                                    ? invoiceStatusColor(s)
+                                    : BillifyColors.divider,
+                                width: isActive ? 2 : 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: invoiceStatusBg(s),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(invoiceStatusIcon(s),
+                                      color: invoiceStatusColor(s), size: 16),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Text(
+                                    s[0].toUpperCase() + s.substring(1),
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      fontWeight: isActive
+                                          ? FontWeight.w700 : FontWeight.w500,
+                                      color: isActive
+                                          ? invoiceStatusColor(s)
+                                          : Theme.of(context).colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ),
+                                if (isActive)
+                                  Icon(Icons.check_circle_rounded,
+                                      color: invoiceStatusColor(s), size: 20),
+                                if (s == widget.current && !isActive)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).dividerColor,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text('current',
+                                        style: GoogleFonts.nunito(
+                                            fontSize: 10,
+                                            color: Theme.of(context)
+                                                .colorScheme.onSurfaceVariant,
+                                            fontWeight: FontWeight.w600)),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                // Apply button — always pinned at bottom
+                _saving
+                    ? const Center(
+                    child: CircularProgressIndicator(
+                        color: BillifyColors.primary))
+                    : ElevatedButton.icon(
+                  onPressed: _apply,
+                  icon: const Icon(Icons.check_rounded),
+                  label: Text('Apply',
+                      style:
+                      GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _selected == widget.current
+                        ? BillifyColors.textSecondary
+                        : invoiceStatusColor(_selected),
+                    minimumSize: const Size(double.infinity, 52),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1049,7 +1069,7 @@ class _InvoiceCard extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.all(AppSettings.compactCards ? 10 : 14),
         decoration: BoxDecoration(
-          color:        Colors.white,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(AppSettings.compactCards ? 12 : 14),
           boxShadow: [
             BoxShadow(
@@ -1087,7 +1107,7 @@ class _InvoiceCard extends StatelessWidget {
                     style: GoogleFonts.poppins(
                       fontSize:   14,
                       fontWeight: FontWeight.w600,
-                      color:      BillifyColors.textPrimary,
+                      color:      Theme.of(context).colorScheme.onSurface,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1098,7 +1118,7 @@ class _InvoiceCard extends StatelessWidget {
                         '${AppSettings.formatDate(invoice.date)}',
                     style: GoogleFonts.nunito(
                       fontSize: 12,
-                      color:    BillifyColors.textSecondary,
+                      color:    Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -1116,7 +1136,7 @@ class _InvoiceCard extends StatelessWidget {
                     style: GoogleFonts.poppins(
                       fontSize:   14,
                       fontWeight: FontWeight.w700,
-                      color:      BillifyColors.textPrimary,
+                      color:      Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                 if (AppSettings.showAmountOnList)
@@ -1171,7 +1191,7 @@ class _EmptyState extends StatelessWidget {
     child: Center(
       child: Text(
         'No data yet. Create your first invoice!',
-        style: GoogleFonts.nunito(color: BillifyColors.textSecondary),
+        style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant),
         textAlign: TextAlign.center,
       ),
     ),
@@ -1184,7 +1204,7 @@ class _EmptyInvoiceState extends StatelessWidget {
     return Container(
       padding:     const EdgeInsets.all(28),
       decoration:  BoxDecoration(
-        color:        Colors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -1196,7 +1216,7 @@ class _EmptyInvoiceState extends StatelessWidget {
             'No invoices yet',
             style: GoogleFonts.poppins(
               fontSize: 15, fontWeight: FontWeight.w600,
-              color: BillifyColors.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 6),
@@ -1204,7 +1224,7 @@ class _EmptyInvoiceState extends StatelessWidget {
             'Tap "New Invoice" to create your first invoice',
             textAlign: TextAlign.center,
             style: GoogleFonts.nunito(
-              fontSize: 13, color: BillifyColors.textSecondary,
+              fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 16),

@@ -45,127 +45,148 @@ void main() async {
 //  BRAND CONSTANTS
 // ════════════════════════════════════════════════════════════
 class BillifyColors {
-  // Primary — Deep Indigo
+  // ── Brand ──────────────────────────────────────────────────
   static const Color primary        = Color(0xFF1A237E);
   static const Color primaryLight   = Color(0xFF534BAE);
   static const Color primaryDark    = Color(0xFF000051);
-
-  // Accent — Amber / Gold
   static const Color accent         = Color(0xFFFFC107);
   static const Color accentDark     = Color(0xFFC79100);
 
-  // Status colors
-  static const Color paid           = Color(0xFF2E7D32); // green
-  static const Color unpaid         = Color(0xFFC62828); // red
-  static const Color draft          = Color(0xFF757575); // grey
-  static const Color overdue        = Color(0xFFE65100); // orange
+  // ── Status ─────────────────────────────────────────────────
+  static const Color paid    = Color(0xFF2E7D32);
+  static const Color unpaid  = Color(0xFFC62828);
+  static const Color draft   = Color(0xFF757575);
+  static const Color overdue = Color(0xFFE65100);
 
-  // Neutral
-  static const Color background     = Color(0xFFF5F6FA);
-  static const Color surface        = Color(0xFFFFFFFF);
-  static const Color textPrimary    = Color(0xFF1A1A2E);
-  static const Color textSecondary  = Color(0xFF6B7280);
-  static const Color divider        = Color(0xFFE5E7EB);
+  // ── Light palette ──────────────────────────────────────────
+  static const Color background    = Color(0xFFF5F6FA);
+  static const Color surface       = Color(0xFFFFFFFF);
+  static const Color textPrimary   = Color(0xFF1A1A2E);
+  static const Color textSecondary = Color(0xFF6B7280);
+  static const Color divider       = Color(0xFFE5E7EB);
 
-  // Dark theme
+  // ── Dark palette ───────────────────────────────────────────
   static const Color darkBackground = Color(0xFF0D0D1A);
   static const Color darkSurface    = Color(0xFF1C1C2E);
   static const Color darkCard       = Color(0xFF252538);
+  static const Color darkBorder     = Color(0xFF2E2E45);
+  static const Color darkText       = Color(0xFFECECF4);
+  static const Color darkTextSub    = Color(0xFF9191A8);
 }
 
-// ════════════════════════════════════════════════════════════
-//  APP THEMES
-// ════════════════════════════════════════════════════════════
+// ── Context-aware color resolver ──────────────────────────────
+// Use these everywhere instead of hardcoded BillifyColors.xxx
+// so the UI automatically adapts to light / dark mode.
+extension AppThemeContext on BuildContext {
+  bool get isDark => Theme.of(this).brightness == Brightness.dark;
+
+  Color get bgColor       => isDark ? BillifyColors.darkBackground : BillifyColors.background;
+  Color get surfaceColor  => isDark ? BillifyColors.darkSurface    : BillifyColors.surface;
+  Color get cardColor     => isDark ? BillifyColors.darkCard       : BillifyColors.surface;
+  Color get borderColor   => isDark ? BillifyColors.darkBorder     : BillifyColors.divider;
+  Color get textPrimary   => isDark ? BillifyColors.darkText       : BillifyColors.textPrimary;
+  Color get textSecondary => isDark ? BillifyColors.darkTextSub    : BillifyColors.textSecondary;
+  Color get dividerColor  => isDark ? BillifyColors.darkBorder     : BillifyColors.divider;
+  Color get iconBg        => isDark ? BillifyColors.darkCard       : BillifyColors.background;
+}
+
+/// Static accessor — use Colors.white etc.
+/// Mirrors AppThemeContext extension for widgets that can't use extension syntax.
+class BillifyC {
+  final BuildContext _ctx;
+  const BillifyC._(this._ctx);
+  static BillifyC of(BuildContext ctx) => BillifyC._(ctx);
+
+  bool   get isDark        => _ctx.isDark;
+  Color  get background    => _ctx.bgColor;
+  Color  get surface       => _ctx.surfaceColor;
+  Color  get card          => _ctx.cardColor;
+  Color  get border        => _ctx.borderColor;
+  Color  get textPrimary   => _ctx.textPrimary;
+  Color  get textSecondary => _ctx.textSecondary;
+  Color  get primary       => BillifyColors.primary;
+  Color  get primaryLight  => BillifyColors.primaryLight;
+  Color  get paid          => BillifyColors.paid;
+  Color  get unpaid        => BillifyColors.unpaid;
+  Color  get overdue       => BillifyColors.overdue;
+  Color  get draft         => BillifyColors.draft;
+}
+
 class BillifyTheme {
-  // ── Light Theme ──
+  // ── Light Theme ──────────────────────────────────────────────
   static ThemeData get light {
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: BillifyColors.primary,
+        seedColor:  BillifyColors.primary,
         brightness: Brightness.light,
-        primary:   BillifyColors.primary,
-        secondary: BillifyColors.accent,
-        surface:   BillifyColors.surface,
+        primary:    BillifyColors.primary,
+        secondary:  BillifyColors.accent,
+        surface:    BillifyColors.surface,
         background: BillifyColors.background,
       ),
       scaffoldBackgroundColor: BillifyColors.background,
     );
-
     return base.copyWith(
       textTheme: GoogleFonts.poppinsTextTheme(base.textTheme).copyWith(
-        // Display / Heading — Poppins
-        displayLarge:  GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.w700, color: BillifyColors.textPrimary),
-        displayMedium: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w700, color: BillifyColors.textPrimary),
-        displaySmall:  GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
-        headlineLarge: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
-        headlineMedium:GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
-        headlineSmall: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
-        // Body — Nunito
-        bodyLarge:     GoogleFonts.nunito(fontSize: 16, fontWeight: FontWeight.w400, color: BillifyColors.textPrimary),
-        bodyMedium:    GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w400, color: BillifyColors.textPrimary),
-        bodySmall:     GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w400, color: BillifyColors.textSecondary),
-        labelLarge:    GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
-        labelMedium:   GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500, color: BillifyColors.textSecondary),
-        labelSmall:    GoogleFonts.nunito(fontSize: 11, fontWeight: FontWeight.w400, color: BillifyColors.textSecondary),
+        displayLarge:  GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.w700),
+        displayMedium: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w700),
+        displaySmall:  GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w600),
+        headlineLarge: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600),
+        headlineMedium:GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
+        headlineSmall: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+        bodyLarge:     GoogleFonts.nunito(fontSize: 16, fontWeight: FontWeight.w400),
+        bodyMedium:    GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w400),
+        bodySmall:     GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w400),
+        labelLarge:    GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600),
+        labelMedium:   GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500),
+        labelSmall:    GoogleFonts.nunito(fontSize: 11, fontWeight: FontWeight.w400),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor:  BillifyColors.primary,
-        foregroundColor:  Colors.white,
-        elevation:        0,
-        centerTitle:      true,
-        titleTextStyle:   GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
-        iconTheme:        const IconThemeData(color: Colors.white),
+        backgroundColor:    BillifyColors.primary,
+        foregroundColor:    Colors.white,
+        elevation:          0,
+        centerTitle:        true,
+        titleTextStyle:     GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+        iconTheme:          const IconThemeData(color: Colors.white),
         systemOverlayStyle: SystemUiOverlayStyle.light,
       ),
       cardTheme: CardThemeData(
-        color:      BillifyColors.surface,
-        elevation:  2,
+        color:       BillifyColors.surface,
+        elevation:   2,
         shadowColor: BillifyColors.primary.withOpacity(0.08),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        shape:       RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        margin:      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor:  BillifyColors.primary,
-          foregroundColor:  Colors.white,
-          elevation:        2,
-          minimumSize:      const Size(double.infinity, 52),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+          backgroundColor: BillifyColors.primary,
+          foregroundColor: Colors.white,
+          elevation:       2,
+          minimumSize:     const Size(double.infinity, 52),
+          shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle:       GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: BillifyColors.primary,
-          side: const BorderSide(color: BillifyColors.primary, width: 1.5),
-          minimumSize: const Size(double.infinity, 52),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+          side:            const BorderSide(color: BillifyColors.primary, width: 1.5),
+          minimumSize:     const Size(double.infinity, 52),
+          shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle:       GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
-        filled:      true,
-        fillColor:   BillifyColors.surface,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: BillifyColors.divider),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: BillifyColors.divider, width: 1.5),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: BillifyColors.primary, width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: BillifyColors.unpaid, width: 1.5),
-        ),
+        filled:    true,
+        fillColor: BillifyColors.surface,
+        border:        OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.divider)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.divider, width: 1.5)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.primary, width: 2)),
+        errorBorder:   OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.unpaid,   width: 1.5)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        labelStyle: GoogleFonts.nunito(color: BillifyColors.textSecondary),
-        hintStyle:  GoogleFonts.nunito(color: BillifyColors.textSecondary.withOpacity(0.7)),
+        labelStyle:  GoogleFonts.nunito(),
+        hintStyle:   GoogleFonts.nunito(),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: BillifyColors.primary,
@@ -173,57 +194,64 @@ class BillifyTheme {
         elevation: 4,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: BillifyColors.surface,
-        selectedItemColor: BillifyColors.primary,
-        unselectedItemColor: BillifyColors.textSecondary,
+        backgroundColor:    BillifyColors.surface,
+        selectedItemColor:  BillifyColors.primary,
+        unselectedItemColor:BillifyColors.textSecondary,
         elevation: 8,
       ),
       drawerTheme: const DrawerThemeData(
         backgroundColor: BillifyColors.surface,
         elevation: 4,
       ),
-      dividerTheme: const DividerThemeData(
-        color: BillifyColors.divider,
-        thickness: 1,
-      ),
+      dividerTheme: const DividerThemeData(color: BillifyColors.divider, thickness: 1),
       chipTheme: ChipThemeData(
-        backgroundColor:    BillifyColors.background,
-        selectedColor:      BillifyColors.primary.withOpacity(0.15),
-        labelStyle:         GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500),
-        side: const BorderSide(color: BillifyColors.divider),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: BillifyColors.background,
+        selectedColor:   BillifyColors.primary.withOpacity(0.15),
+        labelStyle:      GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500),
+        side:            const BorderSide(color: BillifyColors.divider),
+        shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: BillifyColors.darkSurface,
+        backgroundColor:  BillifyColors.darkSurface,
         contentTextStyle: GoogleFonts.nunito(color: Colors.white),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        behavior:         SnackBarBehavior.floating,
+        shape:            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
       dialogTheme: DialogThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        titleTextStyle: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
+        backgroundColor:  BillifyColors.surface,
+        shape:            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titleTextStyle:   GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
         contentTextStyle: GoogleFonts.nunito(fontSize: 14, color: BillifyColors.textSecondary),
       ),
       checkboxTheme: CheckboxThemeData(
-        fillColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) return BillifyColors.primary;
-          return Colors.transparent;
-        }),
-        side: const BorderSide(color: BillifyColors.primary, width: 2),
+        fillColor: MaterialStateProperty.resolveWith((s) =>
+        s.contains(MaterialState.selected) ? BillifyColors.primary : Colors.transparent),
+        side:  const BorderSide(color: BillifyColors.primary, width: 2),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: BillifyColors.primary,
+      switchTheme: SwitchThemeData(
+        thumbColor: MaterialStateProperty.resolveWith((s) =>
+        s.contains(MaterialState.selected) ? BillifyColors.primary : Colors.grey.shade400),
+        trackColor: MaterialStateProperty.resolveWith((s) =>
+        s.contains(MaterialState.selected) ? BillifyColors.primary.withOpacity(0.4) : Colors.grey.shade300),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: BillifyColors.primary),
+      tabBarTheme: TabBarThemeData(
+        labelColor:         Colors.white,
+        unselectedLabelColor: Colors.white70,
+        indicatorColor:     BillifyColors.accent,
+        labelStyle:         GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+        unselectedLabelStyle: GoogleFonts.nunito(fontSize: 13),
       ),
     );
   }
 
-  // ── Dark Theme ──
+  // ── Dark Theme ───────────────────────────────────────────────
   static ThemeData get dark {
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: BillifyColors.primary,
+        seedColor:  BillifyColors.primary,
         brightness: Brightness.dark,
         primary:    BillifyColors.primaryLight,
         secondary:  BillifyColors.accent,
@@ -232,68 +260,139 @@ class BillifyTheme {
       ),
       scaffoldBackgroundColor: BillifyColors.darkBackground,
     );
-
     return base.copyWith(
       textTheme: GoogleFonts.poppinsTextTheme(base.textTheme).copyWith(
-        displayLarge:  GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.w700, color: Colors.white),
-        displayMedium: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w700, color: Colors.white),
-        headlineLarge: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
-        bodyLarge:     GoogleFonts.nunito(fontSize: 16, color: Colors.white70),
-        bodyMedium:    GoogleFonts.nunito(fontSize: 14, color: Colors.white70),
-        bodySmall:     GoogleFonts.nunito(fontSize: 12, color: Colors.white54),
+        displayLarge:  GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.w700, color: BillifyColors.darkText),
+        displayMedium: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w700, color: BillifyColors.darkText),
+        displaySmall:  GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
+        headlineLarge: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
+        headlineMedium:GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
+        headlineSmall: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
+        bodyLarge:     GoogleFonts.nunito(fontSize: 16, color: BillifyColors.darkText),
+        bodyMedium:    GoogleFonts.nunito(fontSize: 14, color: BillifyColors.darkText),
+        bodySmall:     GoogleFonts.nunito(fontSize: 12, color: BillifyColors.darkTextSub),
+        labelLarge:    GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
+        labelMedium:   GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500, color: BillifyColors.darkTextSub),
+        labelSmall:    GoogleFonts.nunito(fontSize: 11, fontWeight: FontWeight.w400, color: BillifyColors.darkTextSub),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor:    BillifyColors.darkSurface,
-        foregroundColor:    Colors.white,
+        foregroundColor:    BillifyColors.darkText,
         elevation:          0,
         centerTitle:        true,
-        titleTextStyle:     GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+        titleTextStyle:     GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
+        iconTheme:          const IconThemeData(color: BillifyColors.darkText),
         systemOverlayStyle: SystemUiOverlayStyle.light,
       ),
       cardTheme: CardThemeData(
         color:     BillifyColors.darkCard,
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        elevation: 0,
+        shape:     RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: BillifyColors.darkBorder, width: 1),
+        ),
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: BillifyColors.primaryLight,
           foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 52),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+          elevation:       0,
+          minimumSize:     const Size(double.infinity, 52),
+          shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle:       GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: BillifyColors.primaryLight,
+          side:            const BorderSide(color: BillifyColors.primaryLight, width: 1.5),
+          minimumSize:     const Size(double.infinity, 52),
+          shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle:       GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled:    true,
         fillColor: BillifyColors.darkCard,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white12),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white24),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: BillifyColors.primaryLight, width: 2),
-        ),
+        border:        OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.darkBorder)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.darkBorder, width: 1.5)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.primaryLight, width: 2)),
+        errorBorder:   OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.unpaid, width: 1.5)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        labelStyle: GoogleFonts.nunito(color: Colors.white54),
-        hintStyle:  GoogleFonts.nunito(color: Colors.white38),
+        labelStyle:  GoogleFonts.nunito(color: BillifyColors.darkTextSub),
+        hintStyle:   GoogleFonts.nunito(color: BillifyColors.darkTextSub.withOpacity(0.7)),
+        prefixIconColor: BillifyColors.primaryLight,
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: BillifyColors.primaryLight,
         foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor:     BillifyColors.darkSurface,
+        selectedItemColor:   BillifyColors.primaryLight,
+        unselectedItemColor: BillifyColors.darkTextSub,
+        elevation: 0,
       ),
       drawerTheme: const DrawerThemeData(
-        backgroundColor: BillifyColors.darkSurface,
+        backgroundColor: BillifyColors.darkBackground,
+        elevation: 0,
+      ),
+      dividerTheme: const DividerThemeData(color: BillifyColors.darkBorder, thickness: 1),
+      chipTheme: ChipThemeData(
+        backgroundColor: BillifyColors.darkCard,
+        selectedColor:   BillifyColors.primaryLight.withOpacity(0.25),
+        labelStyle:      GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500, color: BillifyColors.darkText),
+        side:            const BorderSide(color: BillifyColors.darkBorder),
+        shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor:  BillifyColors.darkCard,
+        contentTextStyle: GoogleFonts.nunito(color: BillifyColors.darkText),
+        behavior:         SnackBarBehavior.floating,
+        shape:            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor:  BillifyColors.darkSurface,
+        shape:            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titleTextStyle:   GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
+        contentTextStyle: GoogleFonts.nunito(fontSize: 14, color: BillifyColors.darkTextSub),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: MaterialStateProperty.resolveWith((s) =>
+        s.contains(MaterialState.selected) ? BillifyColors.primaryLight : Colors.transparent),
+        side:  const BorderSide(color: BillifyColors.primaryLight, width: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: MaterialStateProperty.resolveWith((s) =>
+        s.contains(MaterialState.selected) ? BillifyColors.primaryLight : BillifyColors.darkTextSub),
+        trackColor: MaterialStateProperty.resolveWith((s) =>
+        s.contains(MaterialState.selected) ? BillifyColors.primaryLight.withOpacity(0.4) : BillifyColors.darkBorder),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: BillifyColors.primaryLight),
+      tabBarTheme: TabBarThemeData(
+        labelColor:          BillifyColors.darkText,
+        unselectedLabelColor:BillifyColors.darkTextSub,
+        indicatorColor:      BillifyColors.accent,
+        labelStyle:          GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+        unselectedLabelStyle:GoogleFonts.nunito(fontSize: 13),
+      ),
+      listTileTheme: const ListTileThemeData(
+        tileColor:      Colors.transparent,
+        textColor:      BillifyColors.darkText,
+        iconColor:      BillifyColors.darkTextSub,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color:       BillifyColors.darkCard,
+        shape:       RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle:   GoogleFonts.nunito(color: BillifyColors.darkText, fontSize: 14),
       ),
     );
   }
 }
+
 
 // ════════════════════════════════════════════════════════════
 //  ROUTE NAMES
@@ -594,7 +693,7 @@ class _SplashScreenState extends State<SplashScreen>
                   width:  100,
                   height: 100,
                   decoration: BoxDecoration(
-                    color:        Colors.white,
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
@@ -619,7 +718,7 @@ class _SplashScreenState extends State<SplashScreen>
                   style: GoogleFonts.poppins(
                     fontSize:   38,
                     fontWeight: FontWeight.w800,
-                    color:      Colors.white,
+                    color: Colors.white,
                     letterSpacing: 1.5,
                   ),
                 ),
@@ -684,6 +783,7 @@ class BillifyDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
       child: Padding(
@@ -706,14 +806,14 @@ class BillifyDialog extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                     fontSize: 17, fontWeight: FontWeight.w700,
-                    color: BillifyColors.textPrimary)),
+                    color: Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 10),
             // Body
             Text(body,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.nunito(
                     fontSize: 14, height: 1.5,
-                    color: BillifyColors.textSecondary)),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 24),
             // Buttons — stacked
             SizedBox(
@@ -741,13 +841,13 @@ class BillifyDialog extends StatelessWidget {
                 style: TextButton.styleFrom(
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
-                  backgroundColor: BillifyColors.background,
+                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                 ),
                 onPressed: () => Get.back(result: false),
                 child: Text(cancelLabel,
                     style: GoogleFonts.poppins(
                         fontWeight: FontWeight.w600, fontSize: 14,
-                        color: BillifyColors.textSecondary)),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
             ),
           ],
@@ -792,6 +892,7 @@ class BillifyInputDialogState extends State<BillifyInputDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
       child: Padding(
@@ -815,7 +916,7 @@ class BillifyInputDialogState extends State<BillifyInputDialog> {
               Text(widget.title,
                   style: GoogleFonts.poppins(
                       fontSize: 16, fontWeight: FontWeight.w700,
-                      color: BillifyColors.textPrimary)),
+                      color: Theme.of(context).colorScheme.onSurface)),
             ]),
             const SizedBox(height: 18),
             // Field
@@ -827,6 +928,8 @@ class BillifyInputDialogState extends State<BillifyInputDialog> {
                 hintText: widget.hint,
                 prefixIcon: Icon(widget.icon,
                     color: BillifyColors.primary, size: 18),
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surface,
               ),
               style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w600, fontSize: 15),
@@ -839,14 +942,14 @@ class BillifyInputDialogState extends State<BillifyInputDialog> {
                   style: TextButton.styleFrom(
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
-                    backgroundColor: BillifyColors.background,
+                    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                     minimumSize: const Size(0, 46),
                   ),
                   onPressed: () => Get.back(),
                   child: Text('Cancel',
                       style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w600,
-                          color: BillifyColors.textSecondary)),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 ),
               ),
               const SizedBox(width: 12),
@@ -892,7 +995,7 @@ class BillifyImageSourceSheet extends StatelessWidget {
             child: Container(
               width: 40, height: 4,
               decoration: BoxDecoration(
-                  color: BillifyColors.divider,
+                  color: Theme.of(context).dividerColor,
                   borderRadius: BorderRadius.circular(2)),
             ),
           ),
@@ -900,7 +1003,7 @@ class BillifyImageSourceSheet extends StatelessWidget {
           Text(title,
               style: GoogleFonts.poppins(
                   fontSize: 16, fontWeight: FontWeight.w700,
-                  color: BillifyColors.textPrimary)),
+                  color: Theme.of(context).colorScheme.onSurface)),
           const SizedBox(height: 18),
           BillifySourceOption(
             icon: Icons.photo_library_rounded,
@@ -922,7 +1025,7 @@ class BillifyImageSourceSheet extends StatelessWidget {
             width: double.infinity,
             child: TextButton(
               style: TextButton.styleFrom(
-                backgroundColor: BillifyColors.background,
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14)),
                 minimumSize: const Size(0, 44),
@@ -931,7 +1034,7 @@ class BillifyImageSourceSheet extends StatelessWidget {
               child: Text('Cancel',
                   style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w600,
-                      color: BillifyColors.textSecondary)),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
           ),
         ],
@@ -960,7 +1063,7 @@ class BillifySourceOption extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.06),
+        color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withOpacity(0.2)),
       ),
@@ -979,10 +1082,10 @@ class BillifySourceOption extends StatelessWidget {
             Text(label,
                 style: GoogleFonts.poppins(
                     fontSize: 14, fontWeight: FontWeight.w600,
-                    color: BillifyColors.textPrimary)),
+                    color: Theme.of(context).colorScheme.onSurface)),
             Text(subtitle,
                 style: GoogleFonts.nunito(
-                    fontSize: 12, color: BillifyColors.textSecondary)),
+                    fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ),
       ]),
@@ -1022,7 +1125,7 @@ class BillifyOptionsSheet<T> extends StatelessWidget {
             child: Container(
               width: 40, height: 4,
               decoration: BoxDecoration(
-                  color: BillifyColors.divider,
+                  color: Theme.of(context).dividerColor,
                   borderRadius: BorderRadius.circular(2)),
             ),
           ),
@@ -1041,7 +1144,7 @@ class BillifyOptionsSheet<T> extends StatelessWidget {
             Text(title,
                 style: GoogleFonts.poppins(
                     fontSize: 16, fontWeight: FontWeight.w700,
-                    color: BillifyColors.textPrimary)),
+                    color: Theme.of(context).colorScheme.onSurface)),
           ]),
           const SizedBox(height: 16),
           ...options.map((opt) {
@@ -1055,7 +1158,7 @@ class BillifyOptionsSheet<T> extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: isSelected
                       ? BillifyColors.primary.withOpacity(0.07)
-                      : BillifyColors.background,
+                      : Theme.of(context).scaffoldBackgroundColor,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
                     color: isSelected ? BillifyColors.primary : BillifyColors.divider,
@@ -1186,7 +1289,7 @@ class _BillifyDrawerState extends State<BillifyDrawer>
         opacity: _fadeAnim,
         child: Container(
           decoration: BoxDecoration(
-            color: BillifyColors.surface,
+            color: Colors.white,
             borderRadius: const BorderRadius.only(
               topRight:    Radius.circular(24),
               bottomRight: Radius.circular(24),
@@ -1307,116 +1410,129 @@ class _BillifyDrawerState extends State<BillifyDrawer>
                   },
                 ),
 
-                // ── Section label: Main ─────────────────────
-                _DrawerSectionLabel(label: 'MAIN'),
+                // ── Scrollable nav + footer ────────────────
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
 
-                // ── Nav Items ──────────────────────────────
-                _NavItem(
-                  icon:        Icons.dashboard_rounded,
-                  label:       'Dashboard',
-                  route:       AppRoutes.dashboard,
-                  activeRoute: widget.activeRoute,
-                ),
-                _NavItem(
-                  icon:        Icons.receipt_long_rounded,
-                  label:       'Invoices',
-                  route:       AppRoutes.invoices,
-                  activeRoute: widget.activeRoute,
-                ),
-                _NavItem(
-                  icon:        Icons.account_balance_wallet_rounded,
-                  label:       'Expenses & Income',
-                  route:       AppRoutes.expenses,
-                  activeRoute: widget.activeRoute,
-                ),
-                _NavItem(
-                  icon:        Icons.person_rounded,
-                  label:       'My Profile',
-                  route:       AppRoutes.profile,
-                  activeRoute: widget.activeRoute,
-                ),
+                        // ── Section label: Main ─────────────────────
+                        _DrawerSectionLabel(label: 'MAIN'),
 
-                // ── Section label: More ─────────────────────
-                _DrawerSectionLabel(label: 'MORE'),
-
-                _NavItem(
-                  icon:        Icons.description_rounded,
-                  label:       'Terms & Conditions',
-                  route:       AppRoutes.termsConditions,
-                  activeRoute: widget.activeRoute,
-                ),
-                _NavItem(
-                  icon:        Icons.settings_rounded,
-                  label:       'Settings',
-                  route:       AppRoutes.settings,
-                  activeRoute: widget.activeRoute,
-                ),
-
-                const Spacer(),
-
-                // ── Logout ─────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-                  child: Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: _logout,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 13),
-                        decoration: BoxDecoration(
-                          color: BillifyColors.unpaid.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                              color: BillifyColors.unpaid.withOpacity(0.18)),
+                        // ── Nav Items ──────────────────────────────
+                        _NavItem(
+                          icon:        Icons.dashboard_rounded,
+                          label:       'Dashboard',
+                          route:       AppRoutes.dashboard,
+                          activeRoute: widget.activeRoute,
                         ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(7),
-                              decoration: BoxDecoration(
-                                color:  BillifyColors.unpaid.withOpacity(0.1),
-                                shape: BoxShape.circle,
+                        _NavItem(
+                          icon:        Icons.receipt_long_rounded,
+                          label:       'Invoices',
+                          route:       AppRoutes.invoices,
+                          activeRoute: widget.activeRoute,
+                        ),
+                        _NavItem(
+                          icon:        Icons.account_balance_wallet_rounded,
+                          label:       'Expenses & Income',
+                          route:       AppRoutes.expenses,
+                          activeRoute: widget.activeRoute,
+                        ),
+                        _NavItem(
+                          icon:        Icons.person_rounded,
+                          label:       'My Profile',
+                          route:       AppRoutes.profile,
+                          activeRoute: widget.activeRoute,
+                        ),
+
+                        // ── Section label: More ─────────────────────
+                        _DrawerSectionLabel(label: 'MORE'),
+
+                        _NavItem(
+                          icon:        Icons.description_rounded,
+                          label:       'Terms & Conditions',
+                          route:       AppRoutes.termsConditions,
+                          activeRoute: widget.activeRoute,
+                        ),
+                        _NavItem(
+                          icon:        Icons.settings_rounded,
+                          label:       'Settings',
+                          route:       AppRoutes.settings,
+                          activeRoute: widget.activeRoute,
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // ── Logout ─────────────────────────────────
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(14),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: _logout,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 13),
+                                decoration: BoxDecoration(
+                                  color: BillifyColors.unpaid.withOpacity(0.06),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                      color: BillifyColors.unpaid.withOpacity(0.18)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(7),
+                                      decoration: BoxDecoration(
+                                        color:  BillifyColors.unpaid.withOpacity(0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.logout_rounded,
+                                          color: BillifyColors.unpaid, size: 16),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text('Sign Out',
+                                        style: GoogleFonts.poppins(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: BillifyColors.unpaid)),
+                                  ],
+                                ),
                               ),
-                              child: const Icon(Icons.logout_rounded,
-                                  color: BillifyColors.unpaid, size: 16),
                             ),
-                            const SizedBox(width: 12),
-                            Text('Sign Out',
-                                style: GoogleFonts.poppins(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: BillifyColors.unpaid)),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
-                ),
 
-                // ── Version footer ─────────────────────────
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20, top: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 5, height: 5,
-                        decoration: const BoxDecoration(
-                            color: BillifyColors.primary,
-                            shape: BoxShape.circle),
-                      ),
-                      const SizedBox(width: 6),
-                      Text('Billify  v1.0.0',
-                          style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              letterSpacing: 1.2,
-                              color: BillifyColors.textSecondary
-                                  .withOpacity(0.6),
-                              fontWeight: FontWeight.w500)),
-                    ],
+                        // ── Version footer ─────────────────────────
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 20, top: 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 5, height: 5,
+                                decoration: const BoxDecoration(
+                                    color: BillifyColors.primary,
+                                    shape: BoxShape.circle),
+                              ),
+                              const SizedBox(width: 6),
+                              Text('Billify  v1.0.0',
+                                  style: GoogleFonts.poppins(
+                                      fontSize: 10,
+                                      letterSpacing: 1.2,
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant
+                                          .withOpacity(0.6),
+                                      fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -1563,7 +1679,7 @@ class _DrawerHeader extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color:        Colors.white.withOpacity(0.12),
+                              color: Colors.white.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(20),
                               border:       Border.all(
                                   color: Colors.white.withOpacity(0.25)),
@@ -1692,7 +1808,7 @@ class _DrawerSectionLabel extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.8,
-          color: BillifyColors.textSecondary.withOpacity(0.55)),
+          color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.55)),
     ),
   );
 }
@@ -1858,7 +1974,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: BillifyColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -1884,7 +2000,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               Center(
                 child: Text('Sign in to your account',
-                    style: GoogleFonts.nunito(color: BillifyColors.textSecondary)),
+                    style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
               const SizedBox(height: 40),
 
@@ -1908,7 +2024,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   prefixIcon: const Icon(Icons.lock_rounded, color: BillifyColors.primary),
                   suffixIcon: IconButton(
                     icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility,
-                        color: BillifyColors.textSecondary),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),
@@ -1942,7 +2058,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: RichText(
                     text: TextSpan(
                       text: "Don't have an account? ",
-                      style: GoogleFonts.nunito(color: BillifyColors.textSecondary),
+                      style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant),
                       children: [
                         TextSpan(
                           text: 'Register',
@@ -2047,7 +2163,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w700,
                     color: BillifyColors.primary)),
             Text('Create your free account',
-                style: GoogleFonts.nunito(color: BillifyColors.textSecondary)),
+                style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 32),
 
             TextField(
@@ -2083,7 +2199,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 prefixIcon: const Icon(Icons.lock_rounded, color: BillifyColors.primary),
                 suffixIcon: IconButton(
                   icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility,
-                      color: BillifyColors.textSecondary),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                   onPressed: () => setState(() => _obscure = !_obscure),
                 ),
               ),
@@ -2112,7 +2228,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: RichText(
                 text: TextSpan(
                   text: 'Already have an account? ',
-                  style: GoogleFonts.nunito(color: BillifyColors.textSecondary),
+                  style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant),
                   children: [
                     TextSpan(
                       text: 'Login',
@@ -2138,7 +2254,7 @@ class ForgotPasswordScreen extends StatelessWidget {
     appBar: AppBar(title: const Text('Forgot Password')),
     body: Center(
       child: Text('Forgot Password Screen — Phase 2',
-          style: GoogleFonts.nunito(color: BillifyColors.textSecondary)),
+          style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant)),
     ),
   );
 }
@@ -2239,7 +2355,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                             style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700,
                                 color: BillifyColors.primary)),
                         Text('Last updated: January 2025',
-                            style: GoogleFonts.nunito(color: BillifyColors.textSecondary, fontSize: 12)),
+                            style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -2396,10 +2512,10 @@ class _TermsClause extends StatelessWidget {
               children: [
                 Text(title,
                     style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w600,
-                        color: BillifyColors.textPrimary)),
+                        color: Theme.of(context).colorScheme.onSurface)),
                 const SizedBox(height: 4),
                 Text(body,
-                    style: GoogleFonts.nunito(fontSize: 14, color: BillifyColors.textSecondary,
+                    style: GoogleFonts.nunito(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant,
                         height: 1.5)),
               ],
             ),
@@ -2438,10 +2554,10 @@ class _PlaceholderScreen extends StatelessWidget {
             const SizedBox(height: 16),
             Text(title,
                 style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600,
-                    color: BillifyColors.textPrimary)),
+                    color: Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 8),
             Text('Full screen — Phase 2',
-                style: GoogleFonts.nunito(color: BillifyColors.textSecondary)),
+                style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ),
       ),
@@ -2742,17 +2858,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 Text(label,
                     style: GoogleFonts.nunito(
-                        fontSize: 11, color: BillifyColors.textSecondary,
+                        fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w600)),
                 Text(value.isEmpty ? '—' : value,
                     style: GoogleFonts.nunito(
-                        fontSize: 15, color: BillifyColors.textPrimary,
+                        fontSize: 15, color: Theme.of(context).colorScheme.onSurface,
                         fontWeight: FontWeight.w600)),
               ],
             ),
           ),
-          const Icon(Icons.lock_outline_rounded,
-              size: 14, color: BillifyColors.textSecondary),
+          Icon(Icons.lock_outline_rounded,
+              size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ],
       ),
     );
@@ -2816,7 +2932,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final profileComplete = missing.isEmpty;
 
         return Scaffold(
-          backgroundColor: BillifyColors.background,
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appBar: AppBar(
             title: const Text('My Profile'),
             actions: [
@@ -3203,7 +3319,7 @@ class _AvatarCard extends StatelessWidget {
                   width: 100, height: 100,
                   decoration: BoxDecoration(
                     shape:  BoxShape.circle,
-                    color:  Colors.white.withOpacity(0.15),
+                    color: Colors.white.withOpacity(0.15),
                     border: Border.all(color: Colors.white54, width: 2.5),
                   ),
                   child: ClipOval(
@@ -3219,7 +3335,7 @@ class _AvatarCard extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
-                      color:        Colors.white,
+                      color: Colors.white,
                       shape:        BoxShape.circle,
                       boxShadow: [
                         BoxShadow(color: Colors.black.withOpacity(0.15),
@@ -3284,7 +3400,7 @@ class _AvatarCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.verified_rounded,
+                  Icon(Icons.verified_rounded,
                       size: 13, color: Colors.white),
                   const SizedBox(width: 5),
                   Text('Profile Complete',
@@ -3831,21 +3947,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           title: Text(title,
               style: GoogleFonts.poppins(
                   fontSize: 14, fontWeight: FontWeight.w500,
-                  color: BillifyColors.textPrimary)),
+                  color: Theme.of(context).colorScheme.onSurface)),
           subtitle: subtitle != null
               ? Text(subtitle,
               style: GoogleFonts.nunito(
-                  fontSize: 12, color: BillifyColors.textSecondary))
+                  fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant))
               : null,
           trailing: trailing ?? (onTap != null
-              ? const Icon(Icons.chevron_right_rounded,
-              color: BillifyColors.textSecondary, size: 18)
+              ? Icon(Icons.chevron_right_rounded, color: BillifyColors.textSecondary, size: 18)
               : null),
           onTap: onTap,
         ),
         if (!isLast)
           Divider(height: 1, indent: 58,
-              color: BillifyColors.divider.withOpacity(0.7)),
+              color: Theme.of(context).dividerColor.withOpacity(0.7)),
       ],
     );
   }
@@ -3982,7 +4097,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: BillifyColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Settings')),
       drawer: const BillifyDrawer(activeRoute: AppRoutes.settings),
       body: Obx(() => ListView(
@@ -4154,7 +4269,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     colorText: Colors.white,
                     duration: const Duration(seconds: 4),
                     snackPosition: SnackPosition.TOP,
-                    icon: const Icon(Icons.fingerprint_rounded,
+                    icon: Icon(Icons.fingerprint_rounded,
                         color: Colors.white),
                   );
                 }
@@ -4370,7 +4485,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Text('Billify · Smart Invoicing. Simple Finance.',
                 style: GoogleFonts.nunito(
                     fontSize: 11,
-                    color: BillifyColors.textSecondary.withOpacity(0.6))),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6))),
           ),
         ],
       )),

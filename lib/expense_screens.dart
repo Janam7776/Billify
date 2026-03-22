@@ -11,7 +11,7 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
-import 'main.dart' show BillifyColors, AppRoutes, BillifyDrawer, AppSettings,
+import 'main.dart' show BillifyColors, AppRoutes, BillifyDrawer, AppSettings, BillifyC,
 BillifyDialog;
 
 // ════════════════════════════════════════════════════════════
@@ -163,7 +163,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen>
     final fmt = AppSettings.currencyFmt();
 
     return Scaffold(
-      backgroundColor: BillifyColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       drawer: const BillifyDrawer(activeRoute: AppRoutes.expenses),
       appBar: AppBar(
         title: const Text('Expenses & Income'),
@@ -466,7 +466,7 @@ class _ExpenseCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: EdgeInsets.all(AppSettings.compactCards ? 10 : 14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(AppSettings.compactCards ? 12 : 14),
           boxShadow: [
             BoxShadow(
@@ -499,22 +499,22 @@ class _ExpenseCard extends StatelessWidget {
                     entry.title.isEmpty ? entry.category : entry.title,
                     style: GoogleFonts.poppins(
                         fontSize: 14, fontWeight: FontWeight.w600,
-                        color: BillifyColors.textPrimary),
+                        color: Theme.of(context).colorScheme.onSurface),
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Row(
                     children: [
                       _Chip(label: entry.category, color: BillifyColors.primary),
-                      const SizedBox(width: 6),
-                      _Chip(label: entry.paymentMode, color: BillifyColors.textSecondary),
+                      SizedBox(width: 6),
+                      _Chip(label: entry.paymentMode, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ],
                   ),
                   const SizedBox(height: 2),
                   Text(
                     AppSettings.formatDate(entry.date),
                     style: GoogleFonts.nunito(
-                        fontSize: 11, color: BillifyColors.textSecondary),
+                        fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -536,7 +536,7 @@ class _ExpenseCard extends StatelessWidget {
                   Text(
                     'Tax: ${fmt.format(entry.taxAmount)}',
                     style: GoogleFonts.nunito(
-                        fontSize: 10, color: BillifyColors.textSecondary),
+                        fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
               ],
             ),
@@ -593,13 +593,13 @@ class _EmptyExpenseState extends StatelessWidget {
                 : 'No expense entries',
             style: GoogleFonts.poppins(
                 fontSize: 16, fontWeight: FontWeight.w600,
-                color: BillifyColors.textPrimary),
+                color: Theme.of(context).colorScheme.onSurface),
           ),
           const SizedBox(height: 6),
           Text(
             'Tap "Add Entry" to record your first entry',
             style: GoogleFonts.nunito(
-                color: BillifyColors.textSecondary, fontSize: 13),
+                color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13),
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
@@ -745,7 +745,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     final categories  = isIncome ? kIncomeCategories : kExpenseCategories;
 
     return Scaffold(
-      backgroundColor: BillifyColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(_isEdit
             ? 'Edit Entry'
@@ -768,7 +768,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             // ── Type toggle ────────────────────────────────
             Container(
               decoration: BoxDecoration(
-                color:        Colors.white,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
@@ -835,7 +835,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     prefixText: '₹  ',
                     prefixStyle: GoogleFonts.poppins(
                         fontSize: 16, fontWeight: FontWeight.w700,
-                        color: BillifyColors.textPrimary),
+                        color: Theme.of(context).colorScheme.onSurface),
                   ),
                   style: GoogleFonts.poppins(
                       fontSize: 18, fontWeight: FontWeight.w700),
@@ -856,9 +856,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 7),
                         decoration: BoxDecoration(
-                          color: active
-                              ? (isIncome ? BillifyColors.paid : BillifyColors.primary)
-                              : Colors.white,
+                          color: active ? (isIncome ? BillifyColors.paid : BillifyColors.primary) : Theme.of(context).cardColor,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: active
@@ -917,7 +915,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     decoration: BoxDecoration(
                       color: BillifyColors.background,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: BillifyColors.divider, width: 1.5),
+                      border: Border.all(color: Theme.of(context).dividerColor, width: 1.5),
                     ),
                     child: Row(
                       children: [
@@ -930,7 +928,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                             Text('Date',
                                 style: GoogleFonts.nunito(
                                     fontSize: 11,
-                                    color: BillifyColors.textSecondary)),
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
                             Text(
                               AppSettings.formatDate(_entry.date),
                               style: GoogleFonts.poppins(
@@ -1007,7 +1005,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         'Include GST / Tax',
                         style: GoogleFonts.nunito(
                             fontSize: 14, fontWeight: FontWeight.w600,
-                            color: BillifyColors.textPrimary),
+                            color: Theme.of(context).colorScheme.onSurface),
                       ),
                     ),
                     if (_entry.isTaxable)
@@ -1032,7 +1030,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                               borderSide:
-                              const BorderSide(color: BillifyColors.divider),
+                              BorderSide(color: Theme.of(context).dividerColor),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -1062,7 +1060,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         Text('Tax Amount:',
                             style: GoogleFonts.nunito(
                                 fontSize: 13,
-                                color: BillifyColors.textSecondary)),
+                                color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         Text(
                           '₹${(_entry.amount * _entry.taxPercent / 100).toStringAsFixed(2)}',
                           style: GoogleFonts.poppins(
@@ -1163,7 +1161,7 @@ class _FormCard extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
           decoration: BoxDecoration(
-            color: BillifyColors.primary.withOpacity(0.05),
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.07),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
           ),
           child: Row(
@@ -1247,6 +1245,6 @@ class _SectionLabel extends StatelessWidget {
     text,
     style: GoogleFonts.poppins(
         fontSize: 12, fontWeight: FontWeight.w600,
-        color: BillifyColors.textSecondary),
+        color: Theme.of(context).colorScheme.onSurfaceVariant),
   );
 }

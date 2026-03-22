@@ -8,6 +8,8 @@ import 'dart:math';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:printing/printing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -22,7 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-import 'main.dart' show BillifyColors, AppRoutes, BillifyDrawer, AppSettings,
+import 'main.dart' show BillifyColors, AppRoutes, BillifyDrawer, AppSettings, BillifyC,
 BillifyDialog, BillifyImageSourceSheet;
 import 'dashboard_screen.dart' show invoiceStatusColor, invoiceStatusBg, showStatusPicker;
 
@@ -308,7 +310,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     final fmt = AppSettings.currencyFmt();
 
     return Scaffold(
-      backgroundColor: BillifyColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       drawer: const BillifyDrawer(activeRoute: AppRoutes.invoices),
       appBar: AppBar(
         title: Text(_filterStatus == 'paid_only'
@@ -383,7 +385,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
-                          color: active ? BillifyColors.primary : Colors.white,
+                          color: active ? BillifyColors.primary : Theme.of(context).cardColor,
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: active
                               ? [BoxShadow(color: BillifyColors.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))]
@@ -419,10 +421,10 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.video_camera_front_outlined, size: 72, color: BillifyColors.primary.withOpacity(0.2)),
-                        const SizedBox(height: 16),
-                        Text('No invoices yet', style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary)),
-                        const SizedBox(height: 6),
-                        Text('Tap "New Invoice" to get started', style: GoogleFonts.nunito(color: BillifyColors.textSecondary)),
+                        SizedBox(height: 16),
+                        Text('No invoices yet', style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
+                        SizedBox(height: 6),
+                        Text('Tap "New Invoice" to get started', style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   );
@@ -460,14 +462,14 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                                 children: [
                                   Text(
                                     inv.clientName.isEmpty ? 'Unknown Client' : inv.clientName,
-                                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
+                                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
                                     maxLines: 1, overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 2),
                                   Text('${inv.invoiceNumber}  •  ${inv.orderId}',
-                                      style: GoogleFonts.nunito(fontSize: 12, color: BillifyColors.textSecondary)),
+                                      style: GoogleFonts.nunito(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                                   Text(AppSettings.formatDate(inv.orderDate),
-                                      style: GoogleFonts.nunito(fontSize: 11, color: BillifyColors.textSecondary)),
+                                      style: GoogleFonts.nunito(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                                 ],
                               ),
                             ),
@@ -669,7 +671,7 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
     // Show a full-screen loader while profile is being fetched for new invoices
     if (_inv == null) {
       return Scaffold(
-        backgroundColor: BillifyColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(title: const Text('New Invoice')),
         body: Center(
           child: Column(
@@ -679,7 +681,7 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
               const SizedBox(height: 16),
               Text('Loading your profile…',
                   style: GoogleFonts.nunito(
-                      color: BillifyColors.textSecondary, fontSize: 14)),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14)),
             ],
           ),
         ),
@@ -690,7 +692,7 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
     final steps = ['Details & Client', 'Items & Summary'];
 
     return Scaffold(
-      backgroundColor: BillifyColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(inv.id.isEmpty ? 'New Invoice' : 'Edit Invoice'),
       ),
@@ -992,16 +994,16 @@ class _DetailsStepState extends State<_DetailsStep> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             decoration: BoxDecoration(
               color: Colors.white, borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: BillifyColors.divider, width: 1.5),
+              border: Border.all(color: Theme.of(context).dividerColor, width: 1.5),
             ),
             child: Row(
               children: [
                 const Icon(Icons.calendar_today_rounded, color: BillifyColors.primary, size: 18),
                 const SizedBox(width: 10),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Order Date', style: GoogleFonts.nunito(fontSize: 11, color: BillifyColors.textSecondary)),
+                  Text('Order Date', style: GoogleFonts.nunito(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   Text(AppSettings.formatDate(_orderDate),
-                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary)),
+                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
                 ]),
               ],
             ),
@@ -1077,7 +1079,7 @@ class _DetailsStepState extends State<_DetailsStep> {
                         widget.inv.logoBase64.isNotEmpty
                             ? 'From profile — tap to change'
                             : 'Tap to choose from gallery/camera',
-                        style: GoogleFonts.nunito(fontSize: 11, color: BillifyColors.textSecondary),
+                        style: GoogleFonts.nunito(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -1184,7 +1186,7 @@ class _ItemsStepState extends State<_ItemsStep> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white, borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: BillifyColors.divider),
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Column(
             children: [
@@ -1208,9 +1210,9 @@ class _ItemsStepState extends State<_ItemsStep> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: active ? _statusColor(s) : Colors.white,
+                  color: active ? _statusColor(s) : Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: active ? _statusColor(s) : BillifyColors.divider),
+                  border: Border.all(color: active ? _statusColor(s) : Theme.of(context).dividerColor),
                 ),
                 child: Text(s[0].toUpperCase() + s.substring(1),
                     style: GoogleFonts.nunito(fontWeight: FontWeight.w700,
@@ -1282,7 +1284,7 @@ class _ContentItemRowState extends State<_ContentItemRow> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white, borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: BillifyColors.divider),
+        border: Border.all(color: Theme.of(context).dividerColor),
         boxShadow: [BoxShadow(color: BillifyColors.primary.withOpacity(0.04), blurRadius: 6)],
       ),
       child: Column(
@@ -1304,14 +1306,14 @@ class _ContentItemRowState extends State<_ContentItemRow> {
                   onChanged: (v) { item.title = v; _changed(); },
                   decoration: InputDecoration(
                     hintText: 'Service title (e.g. Reel Shoot — 2hrs)',
-                    hintStyle: GoogleFonts.nunito(color: BillifyColors.textSecondary),
+                    hintStyle: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: BillifyColors.divider, width: 1.5),
+                      borderSide: BorderSide(color: Theme.of(context).dividerColor, width: 1.5),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: BillifyColors.divider, width: 1.5),
+                      borderSide: BorderSide(color: Theme.of(context).dividerColor, width: 1.5),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -1319,9 +1321,9 @@ class _ContentItemRowState extends State<_ContentItemRow> {
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     filled: true,
-                    fillColor: BillifyColors.background,
+                    fillColor: Theme.of(context).scaffoldBackgroundColor,
                   ),
-                  style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
+                  style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
                 ),
               ),
               if (widget.onDelete != null)
@@ -1386,9 +1388,9 @@ class _ContentItemRowState extends State<_ContentItemRow> {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: value ? BillifyColors.primary.withOpacity(0.1) : Colors.white,
+          color: value ? BillifyColors.primary.withOpacity(0.1) : Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: value ? BillifyColors.primary : BillifyColors.divider),
+          border: Border.all(color: value ? BillifyColors.primary : Theme.of(context).dividerColor),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1412,12 +1414,12 @@ class _ContentItemRowState extends State<_ContentItemRow> {
         decoration: InputDecoration(
           labelText: label, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           isDense: true,
-          border:        OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: BillifyColors.divider)),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: BillifyColors.divider, width: 1.5)),
+          border:        OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Theme.of(context).dividerColor)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Theme.of(context).dividerColor, width: 1.5)),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: BillifyColors.primary, width: 2)),
-          filled: true, fillColor: BillifyColors.background,
+          filled: true, fillColor: Theme.of(context).scaffoldBackgroundColor,
         ),
-        style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
+        style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
       );
 }
 
@@ -1501,22 +1503,32 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     }
   }
 
-  // ── PDF generation (true PDF, not image) ──────────────────
+  // ── PDF generation — works on Web + Mobile ───────────────
+  // Uses package:printing which handles:
+  //   • Web  → browser PDF preview with built-in Download button
+  //   • Mobile → native share sheet
   Future<void> _generateAndSharePdf() async {
     final inv = _inv;
     if (inv == null) return;
     setState(() => _generating = true);
     try {
-      final pdfBytes = await _buildPdf(inv);
-      final dir  = await getTemporaryDirectory();
-      final file = File('${dir.path}/invoice_${inv.invoiceNumber.replaceAll('-', '_')}.pdf');
-      await file.writeAsBytes(pdfBytes);
+      final pdfDoc = await _buildPdfDocument(inv);
 
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        subject: 'Invoice ${inv.invoiceNumber}',
-        text: 'Please find your invoice attached.',
-      );
+      if (kIsWeb) {
+        // On web, layoutPdf + Printing.sharePdf opens the PDF in the browser's
+        // built-in PDF viewer which has a native Download button.
+        final bytes = await pdfDoc.save();
+        await Printing.sharePdf(
+          bytes: Uint8List.fromList(bytes),
+          filename: 'invoice_${inv.invoiceNumber.replaceAll('-', '_')}.pdf',
+        );
+      } else {
+        // On mobile, show the native share / print dialog
+        await Printing.layoutPdf(
+          onLayout: (_) async => await pdfDoc.save(),
+          name: 'invoice_${inv.invoiceNumber.replaceAll('-', '_')}.pdf',
+        );
+      }
     } catch (e) {
       Get.snackbar('Error', 'Could not generate PDF: ${e.toString()}',
           backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
@@ -1530,14 +1542,14 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     // Show loading while fetching by ID from dashboard
     if (_loading || _inv == null) {
       return Scaffold(
-        backgroundColor: BillifyColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(title: const Text('Invoice Detail')),
         body: const Center(child: CircularProgressIndicator(color: BillifyColors.primary)),
       );
     }
     final inv = _inv!;
     return Scaffold(
-      backgroundColor: BillifyColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(inv.invoiceNumber.isEmpty ? 'Invoice Detail' : inv.invoiceNumber),
         actions: [
@@ -1574,7 +1586,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 ElevatedButton.icon(
                   onPressed: _generateAndSharePdf,
                   icon:  const Icon(Icons.picture_as_pdf_rounded),
-                  label: const Text('Save / Share as PDF'),
+                  label: Text(kIsWeb ? 'Download PDF' : 'Save / Share as PDF'),
                   style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
                 ),
                 const SizedBox(height: 10),
@@ -1598,7 +1610,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 //  PDF BUILDER  (using pdf package — generates a real PDF)
 // ════════════════════════════════════════════════════════════
 
-Future<List<int>> _buildPdf(Invoice inv) async {
+Future<pw.Document> _buildPdfDocument(Invoice inv) async {
   final pdf     = pw.Document();
   final dateFmt = DateFormat(AppSettings.dateFormat);
 
@@ -1883,7 +1895,7 @@ Future<List<int>> _buildPdf(Invoice inv) async {
     ),
   );
 
-  return pdf.save();
+  return pdf;
 }
 
 // PDF helper widgets
@@ -2041,7 +2053,7 @@ class _InvoicePreview extends StatelessWidget {
 
                 return TableRow(
                   decoration: BoxDecoration(
-                    color: isEven ? Colors.white : const Color(0xFFF9F9F9),
+                    color: isEven ? Theme.of(context).cardColor : Theme.of(context).scaffoldBackgroundColor,
                     border: const Border(bottom: BorderSide(color: Color(0xFFEEEEEE))),
                   ),
                   children: [
