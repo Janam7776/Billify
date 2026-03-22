@@ -75,19 +75,18 @@ class BillifyColors {
 }
 
 // ── Context-aware color resolver ──────────────────────────────
-// Use these everywhere instead of hardcoded BillifyColors.xxx
-// so the UI automatically adapts to light / dark mode.
+// Light theme only — always returns light palette colors.
 extension AppThemeContext on BuildContext {
-  bool get isDark => Theme.of(this).brightness == Brightness.dark;
+  bool get isDark => false; // always light
 
-  Color get bgColor       => isDark ? BillifyColors.darkBackground : BillifyColors.background;
-  Color get surfaceColor  => isDark ? BillifyColors.darkSurface    : BillifyColors.surface;
-  Color get cardColor     => isDark ? BillifyColors.darkCard       : BillifyColors.surface;
-  Color get borderColor   => isDark ? BillifyColors.darkBorder     : BillifyColors.divider;
-  Color get textPrimary   => isDark ? BillifyColors.darkText       : BillifyColors.textPrimary;
-  Color get textSecondary => isDark ? BillifyColors.darkTextSub    : BillifyColors.textSecondary;
-  Color get dividerColor  => isDark ? BillifyColors.darkBorder     : BillifyColors.divider;
-  Color get iconBg        => isDark ? BillifyColors.darkCard       : BillifyColors.background;
+  Color get bgColor       => BillifyColors.background;
+  Color get surfaceColor  => BillifyColors.surface;
+  Color get cardColor     => BillifyColors.surface;
+  Color get borderColor   => BillifyColors.divider;
+  Color get textPrimary   => BillifyColors.textPrimary;
+  Color get textSecondary => BillifyColors.textSecondary;
+  Color get dividerColor  => BillifyColors.divider;
+  Color get iconBg        => BillifyColors.background;
 }
 
 /// Static accessor — use Colors.white etc.
@@ -129,18 +128,18 @@ class BillifyTheme {
     );
     return base.copyWith(
       textTheme: GoogleFonts.poppinsTextTheme(base.textTheme).copyWith(
-        displayLarge:  GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.w700),
-        displayMedium: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w700),
-        displaySmall:  GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w600),
-        headlineLarge: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600),
-        headlineMedium:GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
-        headlineSmall: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
-        bodyLarge:     GoogleFonts.nunito(fontSize: 16, fontWeight: FontWeight.w400),
-        bodyMedium:    GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w400),
-        bodySmall:     GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w400),
-        labelLarge:    GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600),
-        labelMedium:   GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500),
-        labelSmall:    GoogleFonts.nunito(fontSize: 11, fontWeight: FontWeight.w400),
+        displayLarge:  GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.w700, color: BillifyColors.textPrimary),
+        displayMedium: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w700, color: BillifyColors.textPrimary),
+        displaySmall:  GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
+        headlineLarge: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
+        headlineMedium:GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
+        headlineSmall: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
+        bodyLarge:     GoogleFonts.nunito(fontSize: 16, fontWeight: FontWeight.w400, color: BillifyColors.textPrimary),
+        bodyMedium:    GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w400, color: BillifyColors.textPrimary),
+        bodySmall:     GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w400, color: BillifyColors.textSecondary),
+        labelLarge:    GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
+        labelMedium:   GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500, color: BillifyColors.textSecondary),
+        labelSmall:    GoogleFonts.nunito(fontSize: 11, fontWeight: FontWeight.w400, color: BillifyColors.textSecondary),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor:    BillifyColors.primary,
@@ -185,8 +184,9 @@ class BillifyTheme {
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.primary, width: 2)),
         errorBorder:   OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.unpaid,   width: 1.5)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        labelStyle:  GoogleFonts.nunito(),
-        hintStyle:   GoogleFonts.nunito(),
+        labelStyle:  GoogleFonts.nunito(color: BillifyColors.textSecondary),
+        hintStyle:   GoogleFonts.nunito(color: BillifyColors.textSecondary),
+        prefixIconColor: BillifyColors.primary,
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: BillifyColors.primary,
@@ -207,12 +207,12 @@ class BillifyTheme {
       chipTheme: ChipThemeData(
         backgroundColor: BillifyColors.background,
         selectedColor:   BillifyColors.primary.withOpacity(0.15),
-        labelStyle:      GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500),
+        labelStyle:      GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500, color: BillifyColors.textPrimary),
         side:            const BorderSide(color: BillifyColors.divider),
         shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor:  BillifyColors.darkSurface,
+        backgroundColor:  BillifyColors.primary,
         contentTextStyle: GoogleFonts.nunito(color: Colors.white),
         behavior:         SnackBarBehavior.floating,
         shape:            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -243,151 +243,15 @@ class BillifyTheme {
         labelStyle:         GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
         unselectedLabelStyle: GoogleFonts.nunito(fontSize: 13),
       ),
-    );
-  }
-
-  // ── Dark Theme ───────────────────────────────────────────────
-  static ThemeData get dark {
-    final base = ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor:  BillifyColors.primary,
-        brightness: Brightness.dark,
-        primary:    BillifyColors.primaryLight,
-        secondary:  BillifyColors.accent,
-        surface:    BillifyColors.darkSurface,
-        background: BillifyColors.darkBackground,
-      ),
-      scaffoldBackgroundColor: BillifyColors.darkBackground,
-    );
-    return base.copyWith(
-      textTheme: GoogleFonts.poppinsTextTheme(base.textTheme).copyWith(
-        displayLarge:  GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.w700, color: BillifyColors.darkText),
-        displayMedium: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w700, color: BillifyColors.darkText),
-        displaySmall:  GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
-        headlineLarge: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
-        headlineMedium:GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
-        headlineSmall: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
-        bodyLarge:     GoogleFonts.nunito(fontSize: 16, color: BillifyColors.darkText),
-        bodyMedium:    GoogleFonts.nunito(fontSize: 14, color: BillifyColors.darkText),
-        bodySmall:     GoogleFonts.nunito(fontSize: 12, color: BillifyColors.darkTextSub),
-        labelLarge:    GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
-        labelMedium:   GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500, color: BillifyColors.darkTextSub),
-        labelSmall:    GoogleFonts.nunito(fontSize: 11, fontWeight: FontWeight.w400, color: BillifyColors.darkTextSub),
-      ),
-      appBarTheme: AppBarTheme(
-        backgroundColor:    BillifyColors.darkSurface,
-        foregroundColor:    BillifyColors.darkText,
-        elevation:          0,
-        centerTitle:        true,
-        titleTextStyle:     GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
-        iconTheme:          const IconThemeData(color: BillifyColors.darkText),
-        systemOverlayStyle: SystemUiOverlayStyle.light,
-      ),
-      cardTheme: CardThemeData(
-        color:     BillifyColors.darkCard,
-        elevation: 0,
-        shape:     RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: BillifyColors.darkBorder, width: 1),
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: BillifyColors.primaryLight,
-          foregroundColor: Colors.white,
-          elevation:       0,
-          minimumSize:     const Size(double.infinity, 52),
-          shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle:       GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: BillifyColors.primaryLight,
-          side:            const BorderSide(color: BillifyColors.primaryLight, width: 1.5),
-          minimumSize:     const Size(double.infinity, 52),
-          shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle:       GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled:    true,
-        fillColor: BillifyColors.darkCard,
-        border:        OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.darkBorder)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.darkBorder, width: 1.5)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.primaryLight, width: 2)),
-        errorBorder:   OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.unpaid, width: 1.5)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        labelStyle:  GoogleFonts.nunito(color: BillifyColors.darkTextSub),
-        hintStyle:   GoogleFonts.nunito(color: BillifyColors.darkTextSub.withOpacity(0.7)),
-        prefixIconColor: BillifyColors.primaryLight,
-      ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: BillifyColors.primaryLight,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor:     BillifyColors.darkSurface,
-        selectedItemColor:   BillifyColors.primaryLight,
-        unselectedItemColor: BillifyColors.darkTextSub,
-        elevation: 0,
-      ),
-      drawerTheme: const DrawerThemeData(
-        backgroundColor: BillifyColors.darkBackground,
-        elevation: 0,
-      ),
-      dividerTheme: const DividerThemeData(color: BillifyColors.darkBorder, thickness: 1),
-      chipTheme: ChipThemeData(
-        backgroundColor: BillifyColors.darkCard,
-        selectedColor:   BillifyColors.primaryLight.withOpacity(0.25),
-        labelStyle:      GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500, color: BillifyColors.darkText),
-        side:            const BorderSide(color: BillifyColors.darkBorder),
-        shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-      snackBarTheme: SnackBarThemeData(
-        backgroundColor:  BillifyColors.darkCard,
-        contentTextStyle: GoogleFonts.nunito(color: BillifyColors.darkText),
-        behavior:         SnackBarBehavior.floating,
-        shape:            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-      dialogTheme: DialogThemeData(
-        backgroundColor:  BillifyColors.darkSurface,
-        shape:            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        titleTextStyle:   GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.darkText),
-        contentTextStyle: GoogleFonts.nunito(fontSize: 14, color: BillifyColors.darkTextSub),
-      ),
-      checkboxTheme: CheckboxThemeData(
-        fillColor: MaterialStateProperty.resolveWith((s) =>
-        s.contains(MaterialState.selected) ? BillifyColors.primaryLight : Colors.transparent),
-        side:  const BorderSide(color: BillifyColors.primaryLight, width: 2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-      ),
-      switchTheme: SwitchThemeData(
-        thumbColor: MaterialStateProperty.resolveWith((s) =>
-        s.contains(MaterialState.selected) ? BillifyColors.primaryLight : BillifyColors.darkTextSub),
-        trackColor: MaterialStateProperty.resolveWith((s) =>
-        s.contains(MaterialState.selected) ? BillifyColors.primaryLight.withOpacity(0.4) : BillifyColors.darkBorder),
-      ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(color: BillifyColors.primaryLight),
-      tabBarTheme: TabBarThemeData(
-        labelColor:          BillifyColors.darkText,
-        unselectedLabelColor:BillifyColors.darkTextSub,
-        indicatorColor:      BillifyColors.accent,
-        labelStyle:          GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
-        unselectedLabelStyle:GoogleFonts.nunito(fontSize: 13),
-      ),
       listTileTheme: const ListTileThemeData(
         tileColor:      Colors.transparent,
-        textColor:      BillifyColors.darkText,
-        iconColor:      BillifyColors.darkTextSub,
+        textColor:      BillifyColors.textPrimary,
+        iconColor:      BillifyColors.textSecondary,
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color:       BillifyColors.darkCard,
+        color:       BillifyColors.surface,
         shape:       RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle:   GoogleFonts.nunito(color: BillifyColors.darkText, fontSize: 14),
+        textStyle:   GoogleFonts.nunito(color: BillifyColors.textPrimary, fontSize: 14),
       ),
     );
   }
@@ -492,10 +356,9 @@ class _BillifyAppState extends State<BillifyApp>
       title:           'Billify',
       debugShowCheckedModeBanner: false,
 
-      // ── Themes — driven by SettingsController ──
+      // ── Themes — light only ──
       theme:     BillifyTheme.light,
-      darkTheme: BillifyTheme.dark,
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
 
       // ── Default route ──
       initialRoute: AppRoutes.splash,
@@ -3611,7 +3474,6 @@ class _LockScreenState extends State<LockScreen>
 // ════════════════════════════════════════════════════════════
 class SettingsController extends GetxController {
   // Observable settings
-  final themeMode        = 'system'.obs;
   final currencySymbol   = '₹'.obs;
   final dateFormat       = 'd MMM yyyy'.obs;
   final invoicePrefix    = 'INV'.obs;
@@ -3638,7 +3500,6 @@ class SettingsController extends GetxController {
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    themeMode.value        = p.getString(_PrefKeys.themeMode)        ?? 'system';
     currencySymbol.value   = p.getString(_PrefKeys.currencySymbol)   ?? '₹';
     dateFormat.value       = p.getString(_PrefKeys.dateFormat)       ?? 'd MMM yyyy';
     invoicePrefix.value    = p.getString(_PrefKeys.invoicePrefix)    ?? 'INV';
@@ -3648,29 +3509,12 @@ class SettingsController extends GetxController {
     autoLockMins.value     = p.getInt(_PrefKeys.autoLockMins)        ?? 0;
     showAmountOnList.value = p.getBool(_PrefKeys.showAmountOnList)   ?? true;
     compactCards.value     = p.getBool(_PrefKeys.compactCards)       ?? false;
-    _applyTheme();
 
     // Treat cold launch like coming from background so the lock
     // triggers on the first SplashScreen → Dashboard transition.
     if (biometricLock.value || autoLockMins.value > 0) {
       _backgroundedAt = DateTime.now();
     }
-  }
-
-  // ── Theme ──────────────────────────────────────────────────
-  void _applyTheme() {
-    switch (themeMode.value) {
-      case 'light':  Get.changeThemeMode(ThemeMode.light);  break;
-      case 'dark':   Get.changeThemeMode(ThemeMode.dark);   break;
-      default:       Get.changeThemeMode(ThemeMode.system); break;
-    }
-  }
-
-  Future<void> setThemeMode(String val) async {
-    themeMode.value = val;
-    _applyTheme();
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_PrefKeys.themeMode, val);
   }
 
   // ── Persist helpers ────────────────────────────────────────
@@ -4076,14 +3920,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  String _themeModeLabel(String v) {
-    switch (v) {
-      case 'light': return 'Light';
-      case 'dark':  return 'Dark';
-      default:      return 'System Default';
-    }
-  }
-
   String _lockLabel(int v) {
     switch (v) {
       case 1:  return '1 minute';
@@ -4107,19 +3943,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // ── APPEARANCE ─────────────────────────────────────
           _section('APPEARANCE'),
           _card(children: [
-            _tile(
-              icon: Icons.brightness_6_rounded,
-              iconColor: const Color(0xFF7C4DFF),
-              title: 'Theme',
-              subtitle: _themeModeLabel(_ctrl.themeMode.value),
-              onTap: () => _showOptions<String>(
-                title: 'Choose Theme',
-                options: ['system', 'light', 'dark'],
-                current: _ctrl.themeMode.value,
-                label: _themeModeLabel,
-                onSelect: (v) => _ctrl.setThemeMode(v),
-              ),
-            ),
             _switchTile(
               icon: Icons.view_agenda_rounded,
               iconColor: const Color(0xFF00BCD4),

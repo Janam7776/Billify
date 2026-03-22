@@ -103,10 +103,10 @@ class ContentItem {
   factory ContentItem.fromMap(Map<String, dynamic> m) => ContentItem(
     title:       m['title']       ?? '',
     hasQty:      m['hasQty']      ?? false,
-    qty:         (m['qty']        ?? 1) as int,
-    grossAmount: (m['grossAmount']?? 0.0) as double,
+    qty:         (m['qty']        as num? ?? 1).toInt(),
+    grossAmount: (m['grossAmount'] as num? ?? 0.0).toDouble(),
     hasDiscount: m['hasDiscount'] ?? false,
-    discount:    (m['discount']   ?? 0.0) as double,
+    discount:    (m['discount']   as num? ?? 0.0).toDouble(),
     hasTax:      m['hasTax']      ?? false,
     taxPercent:  ((m['taxPercent'] ?? AppSettings.defaultGst) as num).toDouble(),
     hasIgst:     m['hasIgst']     ?? false,
