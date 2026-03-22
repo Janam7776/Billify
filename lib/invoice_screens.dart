@@ -649,15 +649,20 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
       final col = FirebaseFirestore.instance
           .collection('users').doc(uid).collection('invoices');
       if (inv.id.isEmpty) {
+        // New invoice — add and capture the generated ID
         final doc = await col.add(inv.toMap());
         inv.id = doc.id;
       } else {
         await col.doc(inv.id).update(inv.toMap());
       }
-      Get.back();
-      Get.snackbar('Saved ✓', 'Invoice saved successfully',
+      // Navigate to the detail/preview page so the user can immediately
+      // share or download the invoice. Use offNamed so pressing Back
+      // from detail goes to the invoice list, not back to create/edit.
+      Get.offNamed(AppRoutes.invoiceDetail, arguments: inv);
+      Get.snackbar('Saved ✓', 'Invoice saved — tap the button below to share or download',
           backgroundColor: BillifyColors.paid, colorText: Colors.white,
-          snackPosition: SnackPosition.TOP);
+          snackPosition: SnackPosition.TOP,
+          duration: const Duration(seconds: 3));
     } catch (e) {
       Get.snackbar('Error', e.toString(),
           backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
@@ -1517,7 +1522,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       final bytes  = Uint8List.fromList(await pdfDoc.save());
 
       if (kIsWeb) {
-        // Web: Printing.sharePdf triggers the browser's native Save/Download dialog
+        // Web: triggers the browser's native Save/Download dialog
         await Printing.sharePdf(bytes: bytes, filename: filename);
       } else {
         // Android / iOS: write PDF to temp file then open native share sheet
