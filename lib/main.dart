@@ -6,6 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
+import 'dashboard_screen.dart';
+import 'invoice_screens.dart';
 
 // firebase_options.dart is imported above — real keys from FlutterFire CLI
 
@@ -93,7 +95,7 @@ class BillifyTheme {
         bodyLarge:     GoogleFonts.nunito(fontSize: 16, fontWeight: FontWeight.w400, color: BillifyColors.textPrimary),
         bodyMedium:    GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w400, color: BillifyColors.textPrimary),
         bodySmall:     GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w400, color: BillifyColors.textSecondary),
-        labelLarge:    GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: BillifyColors.primary),
+        labelLarge:    GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
         labelMedium:   GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500, color: BillifyColors.textSecondary),
         labelSmall:    GoogleFonts.nunito(fontSize: 11, fontWeight: FontWeight.w400, color: BillifyColors.textSecondary),
       ),
@@ -1437,29 +1439,20 @@ class _PlaceholderScreen extends StatelessWidget {
 }
 
 // Individual placeholder widgets wired to named routes
-class DashboardScreen    extends StatelessWidget { const DashboardScreen({super.key});
-@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'Dashboard',        icon: Icons.dashboard_rounded,                route: AppRoutes.dashboard); }
+// DashboardScreen       → dashboard_screen.dart
+// InvoiceListScreen     → invoice_screens.dart
+// InvoiceCreateScreen   → invoice_screens.dart
+// InvoiceEditScreen     → invoice_screens.dart
+// InvoiceDetailScreen   → invoice_screens.dart
 
-class InvoiceListScreen  extends StatelessWidget { const InvoiceListScreen({super.key});
-@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'Invoices',         icon: Icons.receipt_long_rounded,             route: AppRoutes.invoices); }
+class ExpenseListScreen extends StatelessWidget { const ExpenseListScreen({super.key});
+@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'Expenses & Income', icon: Icons.account_balance_wallet_rounded, route: AppRoutes.expenses); }
 
-class InvoiceCreateScreen extends StatelessWidget { const InvoiceCreateScreen({super.key});
-@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'Create Invoice',   icon: Icons.add_circle_rounded,               route: AppRoutes.invoiceCreate); }
+class AddExpenseScreen extends StatelessWidget { const AddExpenseScreen({super.key});
+@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'Add Entry', icon: Icons.add_rounded, route: AppRoutes.expenseAdd); }
 
-class InvoiceEditScreen  extends StatelessWidget { const InvoiceEditScreen({super.key});
-@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'Edit Invoice',     icon: Icons.edit_rounded,                     route: AppRoutes.invoiceEdit); }
+class ProfileScreen extends StatelessWidget { const ProfileScreen({super.key});
+@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'My Profile', icon: Icons.person_rounded, route: AppRoutes.profile); }
 
-class InvoiceDetailScreen extends StatelessWidget { const InvoiceDetailScreen({super.key});
-@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'Invoice Detail',   icon: Icons.receipt_rounded,                  route: AppRoutes.invoiceDetail); }
-
-class ExpenseListScreen  extends StatelessWidget { const ExpenseListScreen({super.key});
-@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'Expenses & Income',icon: Icons.account_balance_wallet_rounded,    route: AppRoutes.expenses); }
-
-class AddExpenseScreen   extends StatelessWidget { const AddExpenseScreen({super.key});
-@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'Add Entry',        icon: Icons.add_rounded,                      route: AppRoutes.expenseAdd); }
-
-class ProfileScreen      extends StatelessWidget { const ProfileScreen({super.key});
-@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'My Profile',       icon: Icons.person_rounded,                   route: AppRoutes.profile); }
-
-class SettingsScreen     extends StatelessWidget { const SettingsScreen({super.key});
-@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'Settings',         icon: Icons.settings_rounded,                 route: AppRoutes.settings); }
+class SettingsScreen extends StatelessWidget { const SettingsScreen({super.key});
+@override Widget build(BuildContext c) => const _PlaceholderScreen(title: 'Settings', icon: Icons.settings_rounded, route: AppRoutes.settings); }
