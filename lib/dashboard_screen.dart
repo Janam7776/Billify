@@ -5,6 +5,7 @@
 // ════════════════════════════════════════════════════════════
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
@@ -12,7 +13,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
-import 'main.dart' show BillifyColors, AppRoutes, BillifyDrawer;
+import 'main.dart' show BillifyColors, AppRoutes, BillifyDrawer, AppSettings,
+BillifyDialog;
+import 'expense_screens.dart' show ExpenseListScreen, AddExpenseScreen;
 
 // ────────────────────────────────────────────────────────────
 //  DATA MODELS (lightweight, dashboard-only)
@@ -21,6 +24,7 @@ class _DashboardData {
   final double totalRevenue;
   final int    pendingCount;
   final int    paidCount;
+  final double totalExpense;   // from expenses collection
   final double netBalance;
   final List<_MonthBar> monthBars;   // last 4 months
   final List<_RecentInvoice> recent; // last 5 invoices
@@ -29,6 +33,7 @@ class _DashboardData {
     required this.totalRevenue,
     required this.pendingCount,
     required this.paidCount,
+    required this.totalExpense,
     required this.netBalance,
     required this.monthBars,
     required this.recent,
@@ -60,317 +65,364 @@ class _RecentInvoice {
 }
 
 // ────────────────────────────────────────────────────────────
-//  DASHBOARD CONTROLLER (GetX)
-// ────────────────────────────────────────────────────────────
-class DashboardController extends GetxController {
-  final _db   = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
-
-  final isLoading = true.obs;
-  final data      = Rxn<_DashboardData>();
-  final userName  = ''.obs;
-
-  @override
-  void onInit() {
-    super.onInit();
-    _loadUserName();
-    _loadDashboard();
-  }
-
-  void _loadUserName() {
-    final user = _auth.currentUser;
-    if (user != null) {
-      // Use first word of displayName, else fetch from Firestore
-      if (user.displayName != null && user.displayName!.isNotEmpty) {
-        userName.value = user.displayName!.split(' ').first;
-      } else {
-        _db.collection('users').doc(user.uid).get().then((doc) {
-          final full = doc.data()?['fullName'] ?? '';
-          userName.value = (full as String).split(' ').first;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadDashboard() async {
-    isLoading.value = true;
-    try {
-      final uid = _auth.currentUser!.uid;
-
-      // ── Invoices ──
-      final invoiceSnap = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('invoices')
-          .get();
-
-      double totalRevenue = 0;
-      int    pendingCount = 0;
-      int    paidCount    = 0;
-      final List<_RecentInvoice> allInvoices = [];
-
-      for (final doc in invoiceSnap.docs) {
-        final d      = doc.data();
-        final status = (d['status'] ?? 'draft') as String;
-        final amount = (d['totalAmount'] ?? 0.0) as num;
-        final ts     = d['invoiceDate'] as Timestamp?;
-        final date   = ts?.toDate() ?? DateTime.now();
-
-        if (status == 'paid')   { totalRevenue += amount.toDouble(); paidCount++; }
-        if (status == 'unpaid' || status == 'overdue') pendingCount++;
-
-        allInvoices.add(_RecentInvoice(
-          invoiceId:     doc.id,
-          invoiceNumber: d['invoiceNumber'] ?? '',
-          clientName:    d['clientName'] ?? '',
-          totalAmount:   amount.toDouble(),
-          status:        status,
-          date:          date,
-        ));
-      }
-
-      // Sort by date desc, take last 5
-      allInvoices.sort((a, b) => b.date.compareTo(a.date));
-      final recent = allInvoices.take(5).toList();
-
-      // ── Expenses ──
-      final expenseSnap = await _db
-          .collection('users')
-          .doc(uid)
-          .collection('expenses')
-          .get();
-
-      // Build monthly bars — current month + 3 previous
-      final now = DateTime.now();
-      final Map<String, double> incomeByMonth  = {};
-      final Map<String, double> expenseByMonth = {};
-
-      for (int i = 3; i >= 0; i--) {
-        final m    = DateTime(now.year, now.month - i, 1);
-        final key  = DateFormat('MMM').format(m);
-        incomeByMonth[key]  = 0;
-        expenseByMonth[key] = 0;
-      }
-
-      double totalIncome  = 0;
-      double totalExpense = 0;
-
-      for (final doc in expenseSnap.docs) {
-        final d      = doc.data();
-        final type   = (d['type'] ?? 'expense') as String;
-        final amount = (d['amount'] ?? 0.0) as num;
-        final ts     = d['date'] as Timestamp?;
-        final date   = ts?.toDate() ?? DateTime.now();
-        final key    = DateFormat('MMM').format(date);
-
-        if (incomeByMonth.containsKey(key)) {
-          if (type == 'income') {
-            incomeByMonth[key] = incomeByMonth[key]! + amount.toDouble();
-            totalIncome += amount.toDouble();
-          } else {
-            expenseByMonth[key] = expenseByMonth[key]! + amount.toDouble();
-            totalExpense += amount.toDouble();
-          }
-        }
-      }
-
-      final monthBars = incomeByMonth.keys.map((k) =>
-          _MonthBar(k, incomeByMonth[k]!, expenseByMonth[k]!)).toList();
-
-      data.value = _DashboardData(
-        totalRevenue: totalRevenue,
-        pendingCount: pendingCount,
-        paidCount:    paidCount,
-        netBalance:   totalIncome - totalExpense,
-        monthBars:    monthBars,
-        recent:       recent,
-      );
-    } catch (e) {
-      debugPrint('Dashboard load error: $e');
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
-  void refresh() => _loadDashboard();
-}
-
-// ────────────────────────────────────────────────────────────
-//  DASHBOARD SCREEN
+//  DASHBOARD SCREEN  — pure StreamBuilder, no GetX controller
 // ────────────────────────────────────────────────────────────
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
+  // Combine invoice + expense snapshots into dashboard metrics
+  static _DashboardData _compute(
+      QuerySnapshot invoiceSnap, QuerySnapshot expenseSnap) {
+    double totalRevenue = 0;
+    int    pendingCount = 0;
+    int    paidCount    = 0;
+    final  List<_RecentInvoice> allInvoices = [];
+
+    final now = DateTime.now();
+    final Map<String, double> incomeByMonth  = {};
+    final Map<String, double> expenseByMonth = {};
+    for (int i = 3; i >= 0; i--) {
+      final m   = DateTime(now.year, now.month - i, 1);
+      final key = DateFormat('MMM').format(m);
+      incomeByMonth[key]  = 0;
+      expenseByMonth[key] = 0;
+    }
+
+    // Process invoices
+    for (final doc in invoiceSnap.docs) {
+      final d      = doc.data() as Map<String, dynamic>;
+      final status = (d['status'] ?? 'draft') as String;
+      final amount = ((d['totalAmount'] ?? 0) as num).toDouble();
+      final ts     = (d['createdAt'] ?? d['orderDate'] ?? d['invoiceDate'])
+      as Timestamp?;
+      final date   = ts?.toDate() ?? DateTime.now();
+
+      if (status == 'paid')   { totalRevenue += amount; paidCount++; }
+      if (status == 'unpaid' || status == 'overdue') pendingCount++;
+
+      final mKey = DateFormat('MMM').format(date);
+      if (incomeByMonth.containsKey(mKey) && status == 'paid') {
+        incomeByMonth[mKey] = incomeByMonth[mKey]! + amount;
+      }
+
+      allInvoices.add(_RecentInvoice(
+        invoiceId:     doc.id,
+        invoiceNumber: (d['invoiceNumber'] ?? '') as String,
+        clientName:    (d['clientName']    ?? '') as String,
+        totalAmount:   amount,
+        status:        status,
+        date:          date,
+      ));
+    }
+
+    // Process expense / income entries
+    double totalExpense = 0;
+    for (final doc in expenseSnap.docs) {
+      final d    = doc.data() as Map<String, dynamic>;
+      final type = (d['type'] ?? 'expense') as String;
+      final amt  = ((d['netAmount'] ?? d['amount'] ?? 0) as num).toDouble();
+      final ts   = (d['date'] ?? d['createdAt']) as Timestamp?;
+      final date = ts?.toDate() ?? DateTime.now();
+      final mKey = DateFormat('MMM').format(date);
+
+      if (type == 'expense') {
+        totalExpense += amt;
+        if (expenseByMonth.containsKey(mKey)) {
+          expenseByMonth[mKey] = expenseByMonth[mKey]! + amt;
+        }
+      } else if (type == 'income') {
+        if (incomeByMonth.containsKey(mKey)) {
+          incomeByMonth[mKey] = incomeByMonth[mKey]! + amt;
+        }
+      }
+    }
+
+    allInvoices.sort((a, b) => b.date.compareTo(a.date));
+    final monthBars = incomeByMonth.keys
+        .map((k) => _MonthBar(k, incomeByMonth[k]!, expenseByMonth[k]!))
+        .toList();
+
+    return _DashboardData(
+      totalRevenue: totalRevenue,
+      pendingCount: pendingCount,
+      paidCount:    paidCount,
+      totalExpense: totalExpense,
+      netBalance:   totalRevenue - totalExpense,
+      monthBars:    monthBars,
+      recent:       allInvoices.take(5).toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final ctrl = Get.put(DashboardController());
-    final fmt  = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final fmt = AppSettings.currencyFmt();
 
-    return Scaffold(
-      backgroundColor: BillifyColors.background,
-      drawer: const BillifyDrawer(activeRoute: AppRoutes.dashboard),
+    // ── Invoice stream ──
+    final invoiceStream = FirebaseFirestore.instance
+        .collection('users').doc(uid).collection('invoices')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
 
-      // ── Custom AppBar ──
-      appBar: AppBar(
-        backgroundColor: BillifyColors.primary,
-        elevation:       0,
-        leading: Builder(
-          builder: (ctx) => IconButton(
-            icon: const Icon(Icons.menu_rounded, color: Colors.white),
-            onPressed: () => Scaffold.of(ctx).openDrawer(),
-          ),
-        ),
-        title: Image.asset(
-          'assets/images/billify_logo_white.png',
-          height: 28,
-          errorBuilder: (_, __, ___) => Text(
-            'Billify',
-            style: GoogleFonts.poppins(
-              color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        actions: [
-          // Refresh button
-          Obx(() => ctrl.isLoading.value
-              ? const Padding(
-            padding: EdgeInsets.all(14),
-            child: SizedBox(
-              width: 20, height: 20,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white),
-            ),
-          )
-              : IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-            onPressed: ctrl.refresh,
-          )),
-          // Notification placeholder
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
-      ),
+    // ── Expense / income stream ──
+    final expenseStream = FirebaseFirestore.instance
+        .collection('users').doc(uid).collection('expenses')
+        .orderBy('date', descending: true)
+        .snapshots();
 
-      // ── FABs ──
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton.extended(
-            heroTag:     'fab_expense',
-            onPressed:   () => Get.toNamed(AppRoutes.expenseAdd),
-            icon:        const Icon(Icons.add),
-            label:       Text('Add Expense',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-            backgroundColor: BillifyColors.accent,
-            foregroundColor: BillifyColors.textPrimary,
-            elevation:   3,
-          ),
-          const SizedBox(height: 10),
-          FloatingActionButton.extended(
-            heroTag:     'fab_invoice',
-            onPressed:   () => Get.toNamed(AppRoutes.invoiceCreate),
-            icon:        const Icon(Icons.receipt_long_rounded),
-            label:       Text('New Invoice',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-            backgroundColor: BillifyColors.primary,
-            foregroundColor: Colors.white,
-            elevation:   3,
-          ),
-        ],
-      ),
+    // ── User profile stream (for greeting) ──
+    final userStream = FirebaseFirestore.instance
+        .collection('users').doc(uid)
+        .snapshots();
 
-      // ── Body ──
-      body: Obx(() {
-        if (ctrl.isLoading.value) {
-          return const Center(
-            child: CircularProgressIndicator(color: BillifyColors.primary),
-          );
-        }
-
-        final d = ctrl.data.value;
-
-        return RefreshIndicator(
-          color:       BillifyColors.primary,
-          onRefresh:   () async => ctrl.refresh(),
-          child: CustomScrollView(
-            slivers: [
-              // ── Header banner ──
-              SliverToBoxAdapter(
-                child: _HeaderBanner(userName: ctrl.userName.value),
-              ),
-
-              // ── Summary Cards ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: d == null
-                      ? const _EmptyState()
-                      : GridView.count(
-                    crossAxisCount:   2,
-                    shrinkWrap:       true,
-                    physics:          const NeverScrollableScrollPhysics(),
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing:  12,
-                    childAspectRatio: 1.55,
-                    children: [
-                      _SummaryCard(
-                        label:  'Total Revenue',
-                        value:  fmt.format(d.totalRevenue),
-                        icon:   Icons.trending_up_rounded,
-                        color:  BillifyColors.paid,
-                        bgColor: const Color(0xFFE8F5E9),
-                      ),
-                      _SummaryCard(
-                        label:  'Pending',
-                        value:  '${d.pendingCount} invoices',
-                        icon:   Icons.hourglass_bottom_rounded,
-                        color:  BillifyColors.overdue,
-                        bgColor: const Color(0xFFFFF3E0),
-                      ),
-                      _SummaryCard(
-                        label:  'Paid',
-                        value:  '${d.paidCount} invoices',
-                        icon:   Icons.check_circle_rounded,
-                        color:  BillifyColors.primary,
-                        bgColor: const Color(0xFFE8EAF6),
-                      ),
-                      _SummaryCard(
-                        label:  'Net Balance',
-                        value:  fmt.format(d.netBalance),
-                        icon:   Icons.account_balance_wallet_rounded,
-                        color:  d.netBalance >= 0 ? BillifyColors.paid : BillifyColors.unpaid,
-                        bgColor: d.netBalance >= 0
-                            ? const Color(0xFFE8F5E9)
-                            : const Color(0xFFFFEBEE),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ── Bar Chart ──
-              if (d != null && d.monthBars.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: _BarChartCard(bars: d.monthBars),
-                ),
-
-              // ── Recent Invoices ──
-              SliverToBoxAdapter(
-                child: _RecentInvoicesSection(
-                  invoices: d?.recent ?? [],
-                  fmt:      fmt,
-                ),
-              ),
-
-              // Bottom padding for FABs
-              const SliverToBoxAdapter(child: SizedBox(height: 120)),
-            ],
+    return PopScope(
+      // Intercept back — show exit dialog instead of closing app
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => BillifyDialog(
+            icon:         Icons.exit_to_app_rounded,
+            iconColor:    BillifyColors.primary,
+            title:        'Exit Billify?',
+            body:         'Are you sure you want to exit the app?',
+            confirmLabel: 'Exit',
+            confirmColor: BillifyColors.unpaid,
+            onConfirm:    () => Navigator.of(ctx).pop(true),
           ),
         );
-      }),
-    );
+        if (shouldExit == true) {
+          // Actually exit the app
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: BillifyColors.background,
+        drawer: const BillifyDrawer(activeRoute: AppRoutes.dashboard),
+
+        // ── AppBar ──
+        appBar: AppBar(
+          backgroundColor: BillifyColors.primary,
+          elevation: 0,
+          leading: Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.menu_rounded, color: Colors.white),
+              onPressed: () => Scaffold.of(ctx).openDrawer(),
+            ),
+          ),
+          title: Text(
+            'Billify',
+            style: GoogleFonts.poppins(
+                color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+              onPressed: () {},
+            ),
+          ],
+        ),
+
+        // ── FABs ──
+        floatingActionButton: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FloatingActionButton.extended(
+              heroTag:         'fab_expense',
+              onPressed:       () => Get.toNamed(AppRoutes.expenseAdd),
+              icon:            const Icon(Icons.add),
+              label:           Text('Add Expense',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+              backgroundColor: BillifyColors.accent,
+              foregroundColor: BillifyColors.textPrimary,
+              elevation:       3,
+            ),
+            const SizedBox(height: 10),
+            FloatingActionButton.extended(
+              heroTag:         'fab_invoice',
+              onPressed:       () => Get.toNamed(AppRoutes.invoiceCreate),
+              icon:            const Icon(Icons.receipt_long_rounded),
+              label:           Text('New Invoice',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+              backgroundColor: BillifyColors.primary,
+              foregroundColor: Colors.white,
+              elevation:       3,
+            ),
+          ],
+        ),
+
+        // ── Body: nested StreamBuilders (invoices + expenses + user) ──
+        body: StreamBuilder<QuerySnapshot>(
+          stream: invoiceStream,
+          builder: (context, invoiceSnap) {
+            return StreamBuilder<QuerySnapshot>(
+              stream: expenseStream,
+              builder: (context, expenseSnap) {
+
+                // Compute dashboard data when both snapshots are ready
+                final _DashboardData? d =
+                (invoiceSnap.hasData && expenseSnap.hasData)
+                    ? _compute(invoiceSnap.data!, expenseSnap.data!)
+                    : invoiceSnap.hasData
+                    ? _compute(invoiceSnap.data!,
+                    expenseSnap.data ?? const _EmptyQuerySnapshot())
+                    : null;
+
+                return StreamBuilder<DocumentSnapshot>(
+                  stream: userStream,
+                  builder: (context, userSnap) {
+                    final userData =
+                        userSnap.data?.data() as Map<String, dynamic>? ?? {};
+                    final authUser = FirebaseAuth.instance.currentUser;
+                    final fullName = (userData['fullName'] as String?)
+                        ?? authUser?.displayName ?? '';
+                    final userName = fullName.isNotEmpty
+                        ? fullName.split(' ').first : '';
+
+                    // First load — show spinner
+                    if (invoiceSnap.connectionState == ConnectionState.waiting &&
+                        !invoiceSnap.hasData) {
+                      return const Center(
+                          child: CircularProgressIndicator(
+                              color: BillifyColors.primary));
+                    }
+
+                    return RefreshIndicator(
+                      color: BillifyColors.primary,
+                      onRefresh: () async {
+                        await Future.delayed(
+                            const Duration(milliseconds: 400));
+                      },
+                      child: CustomScrollView(
+                        slivers: [
+                          // ── Header banner ──
+                          SliverToBoxAdapter(
+                            child: _HeaderBanner(userName: userName),
+                          ),
+
+                          // ── Summary Cards (6-card grid) ──
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding:
+                              const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                              child: d == null
+                                  ? const _EmptyState()
+                                  : Column(
+                                children: [
+                                  // Row 1
+                                  Row(children: [
+                                    Expanded(
+                                      child: _SummaryCard(
+                                        label:   'Total Revenue',
+                                        value:   fmt.format(d.totalRevenue),
+                                        icon:    Icons.trending_up_rounded,
+                                        color:   BillifyColors.paid,
+                                        bgColor: const Color(0xFFE8F5E9),
+                                        onTap: () => Get.toNamed(AppRoutes.invoices,
+                                            arguments: {'filter': 'paid_only'}),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _SummaryCard(
+                                        label:   'Total Expenses',
+                                        value:   fmt.format(d.totalExpense),
+                                        icon:    Icons.arrow_upward_rounded,
+                                        color:   BillifyColors.unpaid,
+                                        bgColor: const Color(0xFFFFEBEE),
+                                        onTap: () => Get.toNamed(AppRoutes.expenses),
+                                      ),
+                                    ),
+                                  ]),
+                                  const SizedBox(height: 12),
+                                  // Row 2
+                                  Row(children: [
+                                    Expanded(
+                                      child: _SummaryCard(
+                                        label:   'Net Balance',
+                                        value:   fmt.format(d.netBalance),
+                                        icon:    Icons.account_balance_wallet_rounded,
+                                        color:   d.netBalance >= 0
+                                            ? BillifyColors.paid
+                                            : BillifyColors.unpaid,
+                                        bgColor: d.netBalance >= 0
+                                            ? const Color(0xFFE8F5E9)
+                                            : const Color(0xFFFFEBEE),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _SummaryCard(
+                                        label:   'Pending',
+                                        value:   '${d.pendingCount} invoices',
+                                        icon:    Icons.hourglass_bottom_rounded,
+                                        color:   BillifyColors.overdue,
+                                        bgColor: const Color(0xFFFFF3E0),
+                                        onTap: () => Get.toNamed(AppRoutes.invoices,
+                                            arguments: {'filter': 'pending_only'}),
+                                      ),
+                                    ),
+                                  ]),
+                                  const SizedBox(height: 12),
+                                  // Row 3
+                                  Row(children: [
+                                    Expanded(
+                                      child: _SummaryCard(
+                                        label:   'Paid Invoices',
+                                        value:   '${d.paidCount} invoices',
+                                        icon:    Icons.check_circle_rounded,
+                                        color:   BillifyColors.primary,
+                                        bgColor: const Color(0xFFE8EAF6),
+                                        onTap: () => Get.toNamed(AppRoutes.invoices,
+                                            arguments: {'filter': 'paid_only'}),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _SummaryCard(
+                                        label:   'Expenses & Income',
+                                        value:   'View All',
+                                        icon:    Icons.bar_chart_rounded,
+                                        color:   BillifyColors.primaryLight,
+                                        bgColor: const Color(0xFFEDE7F6),
+                                        onTap: () => Get.toNamed(AppRoutes.expenses),
+                                      ),
+                                    ),
+                                  ]),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          // ── Bar Chart ──
+                          if (d != null && d.monthBars.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: _BarChartCard(bars: d.monthBars),
+                            ),
+
+                          // ── Recent Invoices ──
+                          SliverToBoxAdapter(
+                            child: _RecentInvoicesSection(
+                              invoices: d?.recent ?? [],
+                              fmt:      fmt,
+                            ),
+                          ),
+
+                          // Bottom padding for FABs
+                          const SliverToBoxAdapter(
+                              child: SizedBox(height: 120)),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        ),
+      ), // Scaffold
+    ); // PopScope
   }
 }
 
@@ -429,11 +481,12 @@ class _HeaderBanner extends StatelessWidget {
 //  SUMMARY CARD
 // ────────────────────────────────────────────────────────────
 class _SummaryCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color  color;
-  final Color  bgColor;
+  final String    label;
+  final String    value;
+  final IconData  icon;
+  final Color     color;
+  final Color     bgColor;
+  final VoidCallback? onTap;
 
   const _SummaryCard({
     required this.label,
@@ -441,57 +494,70 @@ class _SummaryCard extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.bgColor,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color:        Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color:      BillifyColors.primary.withOpacity(0.07),
-            blurRadius: 10,
-            offset:     const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment:  MainAxisAlignment.spaceBetween,
-        children: [
-          // Icon badge
-          Container(
-            padding:     const EdgeInsets.all(8),
-            decoration:  BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          // Values
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.poppins(
-                  fontSize:   15,
-                  fontWeight: FontWeight.w700,
-                  color:      BillifyColors.textPrimary,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color:        Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color:      BillifyColors.primary.withOpacity(0.07),
+              blurRadius: 10,
+              offset:     const Offset(0, 4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment:  MainAxisAlignment.spaceBetween,
+          children: [
+            // Icon badge
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding:    const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                      color: bgColor, borderRadius: BorderRadius.circular(10)),
+                  child: Icon(icon, color: color, size: 20),
                 ),
-              ),
-              Text(
-                label,
-                style: GoogleFonts.nunito(
-                  fontSize: 12,
-                  color:    BillifyColors.textSecondary,
+                if (onTap != null)
+                  Icon(Icons.chevron_right_rounded,
+                      size: 16, color: BillifyColors.textSecondary.withOpacity(0.5)),
+              ],
+            ),
+            // Values
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize:   15,
+                    fontWeight: FontWeight.w700,
+                    color:      BillifyColors.textPrimary,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+                Text(
+                  label,
+                  style: GoogleFonts.nunito(
+                    fontSize: 12,
+                    color:    BillifyColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -615,8 +681,7 @@ class _BarChartCard extends StatelessWidget {
                   touchTooltipData: BarTouchTooltipData(
                     getTooltipItem: (group, _, rod, rodIndex) {
                       final label = rodIndex == 0 ? 'Income' : 'Expense';
-                      final fmt = NumberFormat.compactCurrency(
-                          locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+                      final fmt = AppSettings.currencyFmt();
                       return BarTooltipItem(
                         '$label\n${fmt.format(rod.toY)}',
                         GoogleFonts.nunito(
@@ -720,30 +785,259 @@ class _RecentInvoicesSection extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
+//  SHARED STATUS HELPERS  (used by dashboard + invoice list)
+// ────────────────────────────────────────────────────────────
+Color invoiceStatusColor(String s) {
+  switch (s) {
+    case 'paid':    return BillifyColors.paid;
+    case 'unpaid':  return BillifyColors.unpaid;
+    case 'overdue': return BillifyColors.overdue;
+    default:        return BillifyColors.draft;
+  }
+}
+
+Color invoiceStatusBg(String s) {
+  switch (s) {
+    case 'paid':    return const Color(0xFFE8F5E9);
+    case 'unpaid':  return const Color(0xFFFFEBEE);
+    case 'overdue': return const Color(0xFFFFF3E0);
+    default:        return const Color(0xFFF5F5F5);
+  }
+}
+
+IconData invoiceStatusIcon(String s) {
+  switch (s) {
+    case 'paid':    return Icons.check_circle_rounded;
+    case 'unpaid':  return Icons.schedule_rounded;
+    case 'overdue': return Icons.warning_amber_rounded;
+    default:        return Icons.edit_rounded;
+  }
+}
+
+/// Shows a bottom sheet to change invoice status, then writes to Firestore.
+Future<void> showStatusPicker(BuildContext context, String invoiceId, String current) async {
+  final statuses = ['draft', 'unpaid', 'paid', 'overdue'];
+  await showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (ctx) => _StatusPickerSheet(
+      invoiceId: invoiceId,
+      current:   current,
+      statuses:  statuses,
+    ),
+  );
+}
+
+class _StatusPickerSheet extends StatefulWidget {
+  final String       invoiceId;
+  final String       current;
+  final List<String> statuses;
+  const _StatusPickerSheet({
+    required this.invoiceId,
+    required this.current,
+    required this.statuses,
+  });
+  @override
+  State<_StatusPickerSheet> createState() => _StatusPickerSheetState();
+}
+
+class _StatusPickerSheetState extends State<_StatusPickerSheet> {
+  late String _selected;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.current;
+  }
+
+  Future<void> _apply() async {
+    if (_selected == widget.current) { Navigator.of(context).pop(); return; }
+    setState(() => _saving = true);
+    try {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      await FirebaseFirestore.instance
+          .collection('users').doc(uid)
+          .collection('invoices').doc(widget.invoiceId)
+          .update({'status': _selected});
+      if (mounted) Navigator.of(context).pop();
+      Get.snackbar(
+        'Status Updated',
+        'Invoice marked as ${_selected[0].toUpperCase()}${_selected.substring(1)}',
+        backgroundColor: invoiceStatusColor(_selected),
+        colorText:       Colors.white,
+        snackPosition:   SnackPosition.TOP,
+        duration:        const Duration(seconds: 2),
+      );
+    } catch (e) {
+      if (mounted) setState(() => _saving = false);
+      Get.snackbar('Error', 'Could not update status',
+          backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: BillifyColors.divider,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Title
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: BillifyColors.primary.withOpacity(0.09),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.swap_horiz_rounded,
+                        color: BillifyColors.primary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Change Status',
+                          style: GoogleFonts.poppins(
+                              fontSize: 16, fontWeight: FontWeight.w700,
+                              color: BillifyColors.textPrimary)),
+                      Text('Select a status below, then tap Apply',
+                          style: GoogleFonts.nunito(
+                              fontSize: 12, color: BillifyColors.textSecondary)),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // Status options
+              ...widget.statuses.map((s) {
+                final isActive = _selected == s;
+                return GestureDetector(
+                  onTap: () => setState(() => _selected = s),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? invoiceStatusBg(s)
+                          : BillifyColors.background,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isActive
+                            ? invoiceStatusColor(s)
+                            : BillifyColors.divider,
+                        width: isActive ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: invoiceStatusBg(s),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(invoiceStatusIcon(s),
+                              color: invoiceStatusColor(s), size: 16),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            s[0].toUpperCase() + s.substring(1),
+                            style: GoogleFonts.poppins(
+                              fontSize:   14,
+                              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                              color: isActive
+                                  ? invoiceStatusColor(s)
+                                  : BillifyColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        if (isActive)
+                          Icon(Icons.check_circle_rounded,
+                              color: invoiceStatusColor(s), size: 20),
+                        if (s == widget.current && !isActive)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: BillifyColors.divider,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text('current',
+                                style: GoogleFonts.nunito(
+                                    fontSize: 10,
+                                    color: BillifyColors.textSecondary,
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+
+              const SizedBox(height: 4),
+
+              // Apply button
+              const SizedBox(height: 4),
+              _saving
+                  ? const Center(
+                  child: CircularProgressIndicator(color: BillifyColors.primary))
+                  : ElevatedButton.icon(
+                onPressed: _apply,
+                icon:  const Icon(Icons.check_rounded),
+                label: Text('Apply',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _selected == widget.current
+                      ? BillifyColors.textSecondary
+                      : invoiceStatusColor(_selected),
+                  minimumSize: const Size(double.infinity, 52),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  elevation: 0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────
 //  INVOICE CARD (recent)
 // ────────────────────────────────────────────────────────────
 class _InvoiceCard extends StatelessWidget {
   final _RecentInvoice invoice;
   final NumberFormat   fmt;
   const _InvoiceCard({required this.invoice, required this.fmt});
-
-  Color _statusColor(String s) {
-    switch (s) {
-      case 'paid':    return BillifyColors.paid;
-      case 'unpaid':  return BillifyColors.unpaid;
-      case 'overdue': return BillifyColors.overdue;
-      default:        return BillifyColors.draft;
-    }
-  }
-
-  Color _statusBg(String s) {
-    switch (s) {
-      case 'paid':    return const Color(0xFFE8F5E9);
-      case 'unpaid':  return const Color(0xFFFFEBEE);
-      case 'overdue': return const Color(0xFFFFF3E0);
-      default:        return const Color(0xFFF5F5F5);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -753,10 +1047,10 @@ class _InvoiceCard extends StatelessWidget {
         arguments: {'invoiceId': invoice.invoiceId},
       ),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(AppSettings.compactCards ? 10 : 14),
         decoration: BoxDecoration(
           color:        Colors.white,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppSettings.compactCards ? 12 : 14),
           boxShadow: [
             BoxShadow(
               color:      BillifyColors.primary.withOpacity(0.06),
@@ -801,7 +1095,7 @@ class _InvoiceCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '${invoice.invoiceNumber}  •  '
-                        '${DateFormat('d MMM yyyy').format(invoice.date)}',
+                        '${AppSettings.formatDate(invoice.date)}',
                     style: GoogleFonts.nunito(
                       fontSize: 12,
                       color:    BillifyColors.textSecondary,
@@ -812,31 +1106,48 @@ class _InvoiceCard extends StatelessWidget {
             ),
             const SizedBox(width: 10),
 
-            // Amount + status badge
+            // Amount + tappable status badge
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  fmt.format(invoice.totalAmount),
-                  style: GoogleFonts.poppins(
-                    fontSize:   14,
-                    fontWeight: FontWeight.w700,
-                    color:      BillifyColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color:        _statusBg(invoice.status),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    invoice.status[0].toUpperCase() + invoice.status.substring(1),
-                    style: GoogleFonts.nunito(
-                      fontSize:   11,
+                if (AppSettings.showAmountOnList)
+                  Text(
+                    fmt.format(invoice.totalAmount),
+                    style: GoogleFonts.poppins(
+                      fontSize:   14,
                       fontWeight: FontWeight.w700,
-                      color:      _statusColor(invoice.status),
+                      color:      BillifyColors.textPrimary,
+                    ),
+                  ),
+                if (AppSettings.showAmountOnList)
+                  const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () => showStatusPicker(
+                      context, invoice.invoiceId, invoice.status),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color:        invoiceStatusBg(invoice.status),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: invoiceStatusColor(invoice.status).withOpacity(0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          invoice.status[0].toUpperCase() + invoice.status.substring(1),
+                          style: GoogleFonts.nunito(
+                            fontSize:   11,
+                            fontWeight: FontWeight.w700,
+                            color:      invoiceStatusColor(invoice.status),
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Icon(Icons.expand_more_rounded,
+                            size: 13,
+                            color: invoiceStatusColor(invoice.status)),
+                      ],
                     ),
                   ),
                 ),
@@ -915,4 +1226,27 @@ class _EmptyInvoiceState extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  EMPTY QUERY SNAPSHOT — used as placeholder while expense
+//  stream hasn't emitted yet, so dashboard renders immediately.
+// ─────────────────────────────────────────────────────────────
+class _EmptyQuerySnapshot implements QuerySnapshot<Map<String, dynamic>> {
+  const _EmptyQuerySnapshot();
+
+  @override List<QueryDocumentSnapshot<Map<String, dynamic>>> get docs => [];
+  @override List<DocumentChange<Map<String, dynamic>>>  get docChanges => [];
+  @override SnapshotMetadata get metadata => _EmptyMetadata();
+  @override int get size => 0;
+
+  @override
+  bool operator ==(Object other) => other is _EmptyQuerySnapshot;
+  @override
+  int get hashCode => 0;
+}
+
+class _EmptyMetadata implements SnapshotMetadata {
+  @override bool get hasPendingWrites => false;
+  @override bool get isFromCache      => true;
 }
