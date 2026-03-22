@@ -1505,28 +1505,28 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
   // ── PDF generation — works on Web + Mobile ───────────────
   // Uses package:printing which handles:
-  //   • Web  → browser PDF preview with built-in Download button
-  //   • Mobile → native share sheet
+  //   • Android → native share sheet via share_plus
+  //   • Web     → browser download via Printing.sharePdf
   Future<void> _generateAndSharePdf() async {
     final inv = _inv;
     if (inv == null) return;
     setState(() => _generating = true);
+    final filename = 'invoice_${inv.invoiceNumber.replaceAll('-', '_')}.pdf';
     try {
       final pdfDoc = await _buildPdfDocument(inv);
+      final bytes  = Uint8List.fromList(await pdfDoc.save());
 
       if (kIsWeb) {
-        // On web, layoutPdf + Printing.sharePdf opens the PDF in the browser's
-        // built-in PDF viewer which has a native Download button.
-        final bytes = await pdfDoc.save();
-        await Printing.sharePdf(
-          bytes: Uint8List.fromList(bytes),
-          filename: 'invoice_${inv.invoiceNumber.replaceAll('-', '_')}.pdf',
-        );
+        // Web: Printing.sharePdf triggers the browser's native Save/Download dialog
+        await Printing.sharePdf(bytes: bytes, filename: filename);
       } else {
-        // On mobile, show the native share / print dialog
-        await Printing.layoutPdf(
-          onLayout: (_) async => await pdfDoc.save(),
-          name: 'invoice_${inv.invoiceNumber.replaceAll('-', '_')}.pdf',
+        // Android / iOS: write PDF to temp file then open native share sheet
+        final dir  = await getTemporaryDirectory();
+        final file = File('${dir.path}/$filename');
+        await file.writeAsBytes(bytes);
+        await Share.shareXFiles(
+          [XFile(file.path, mimeType: 'application/pdf')],
+          subject: filename,
         );
       }
     } catch (e) {
