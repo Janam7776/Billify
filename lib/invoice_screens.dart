@@ -7,6 +7,8 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:convert';
 import 'dart:typed_data';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:js' as js;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:printing/printing.dart';
@@ -649,15 +651,13 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
       final col = FirebaseFirestore.instance
           .collection('users').doc(uid).collection('invoices');
       if (inv.id.isEmpty) {
-        // New invoice — add and capture the generated ID
         final doc = await col.add(inv.toMap());
         inv.id = doc.id;
       } else {
         await col.doc(inv.id).update(inv.toMap());
       }
-      // Navigate to the detail/preview page so the user can immediately
-      // share or download the invoice. Use offNamed so pressing Back
-      // from detail goes to the invoice list, not back to create/edit.
+      // Navigate to detail/preview so user can immediately share or download.
+      // offNamed replaces create/edit in the stack so Back → invoice list.
       Get.offNamed(AppRoutes.invoiceDetail, arguments: inv);
       Get.snackbar('Saved ✓', 'Invoice saved — tap the button below to share or download',
           backgroundColor: BillifyColors.paid, colorText: Colors.white,
@@ -1511,7 +1511,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   // ── PDF generation — works on Web + Mobile ───────────────
   // Uses package:printing which handles:
   //   • Android → native share sheet via share_plus
-  //   • Web     → browser download via Printing.sharePdf
+  //   • Web     → data-URI anchor download (no plugin needed)
   Future<void> _generateAndSharePdf() async {
     final inv = _inv;
     if (inv == null) return;
@@ -1522,8 +1522,22 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       final bytes  = Uint8List.fromList(await pdfDoc.save());
 
       if (kIsWeb) {
-        // Web: triggers the browser's native Save/Download dialog
-        await Printing.sharePdf(bytes: bytes, filename: filename);
+        // Web: build a base64 data-URI and click a hidden <a download> via JS.
+        // No plugin required — works on any browser.
+        final base64  = base64Encode(bytes);
+        final dataUri = 'data:application/pdf;base64,$base64';
+        js.context.callMethod('eval', [
+          '''
+          (function() {
+            var a = document.createElement('a');
+            a.href = '$dataUri';
+            a.download = '$filename';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          })();
+          '''
+        ]);
       } else {
         // Android / iOS: write PDF to temp file then open native share sheet
         final dir  = await getTemporaryDirectory();
