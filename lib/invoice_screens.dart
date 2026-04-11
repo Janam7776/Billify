@@ -7,11 +7,12 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:convert';
 import 'dart:typed_data';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:js' as js;
 
+// Web-only: used for browser-side PDF download
+// ignore: avoid_web_libraries_in_flutter
+//import 'dart:html' as html show AnchorElement, Url, Blob;
+import 'pdf_download.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:printing/printing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -105,10 +106,10 @@ class ContentItem {
   factory ContentItem.fromMap(Map<String, dynamic> m) => ContentItem(
     title:       m['title']       ?? '',
     hasQty:      m['hasQty']      ?? false,
-    qty:         (m['qty']        as num? ?? 1).toInt(),
-    grossAmount: (m['grossAmount'] as num? ?? 0.0).toDouble(),
+    qty:         ((m['qty']        ?? 1) as num).toInt(),
+    grossAmount: ((m['grossAmount']?? 0) as num).toDouble(),
     hasDiscount: m['hasDiscount'] ?? false,
-    discount:    (m['discount']   as num? ?? 0.0).toDouble(),
+    discount:    ((m['discount']   ?? 0) as num).toDouble(),
     hasTax:      m['hasTax']      ?? false,
     taxPercent:  ((m['taxPercent'] ?? AppSettings.defaultGst) as num).toDouble(),
     hasIgst:     m['hasIgst']     ?? false,
@@ -312,220 +313,310 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     final fmt = AppSettings.currencyFmt();
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: BillifyColors.background,
       drawer: const BillifyDrawer(activeRoute: AppRoutes.invoices),
-      appBar: AppBar(
-        title: Text(_filterStatus == 'paid_only'
-            ? 'Paid Invoices'
-            : _filterStatus == 'pending_only'
-            ? 'Pending Invoices'
-            : 'Invoices'),
-        leading: _filterStatus != 'all'
-            ? IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () {
-            setState(() => _filterStatus = 'all');
-            Get.back();
-          },
-        )
-            : null,
-        actions: [
-          if (_filterStatus != 'all')
-            TextButton(
-              onPressed: () => setState(() => _filterStatus = 'all'),
-              child: Text('Show All',
-                  style: GoogleFonts.poppins(
-                      color: Colors.white, fontWeight: FontWeight.w600,
-                      fontSize: 13)),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.add_rounded),
-              onPressed: () => Get.toNamed(AppRoutes.invoiceCreate),
-              tooltip: 'New Invoice',
-            ),
-        ],
-      ),
+      appBar: _buildAppBar(),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Get.toNamed(AppRoutes.invoiceCreate),
-        icon:  const Icon(Icons.receipt_long_rounded),
-        label: Text('New Invoice', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        icon: const Icon(Icons.receipt_long_rounded, size: 18),
+        label: Text(
+          'NEW INVOICE',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
+        ),
+        backgroundColor: BillifyColors.primary,
+        foregroundColor: const Color(0xFFF7F7FF),
+        elevation: 0,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: (v) => setState(() => _searchQuery = v),
-              decoration: InputDecoration(
-                hintText:   'Search by client, invoice or order no.',
-                prefixIcon: const Icon(Icons.search_rounded, color: BillifyColors.primary),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                  icon: const Icon(Icons.clear_rounded),
-                  onPressed: () { _searchCtrl.clear(); setState(() => _searchQuery = ''); },
-                )
-                    : null,
-              ),
-            ),
+            child: _buildSearchField(),
           ),
-
-          // Status chips
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: ['all', 'draft', 'unpaid', 'paid', 'overdue'].map((s) {
-                  final active = _filterStatus == s;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _filterStatus = s),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: active ? BillifyColors.primary : Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: active
-                              ? [BoxShadow(color: BillifyColors.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))]
-                              : [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)],
-                        ),
-                        child: Text(
-                          s == 'all' ? 'All' : s[0].toUpperCase() + s.substring(1),
-                          style: GoogleFonts.nunito(
-                            fontWeight: FontWeight.w700, fontSize: 13,
-                            color: active ? Colors.white : BillifyColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
+            child: _buildStatusFilterChips(context),
           ),
-
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _stream(),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: BillifyColors.primary));
-                }
-                final invoices = _applyFilter(snap.data?.docs ?? []);
-
-                if (invoices.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.video_camera_front_outlined, size: 72, color: BillifyColors.primary.withOpacity(0.2)),
-                        SizedBox(height: 16),
-                        Text('No invoices yet', style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
-                        SizedBox(height: 6),
-                        Text('Tap "New Invoice" to get started', style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-                  itemCount: invoices.length,
-                  itemBuilder: (_, i) {
-                    final inv = invoices[i];
-                    return GestureDetector(
-                      onTap: () => Get.toNamed(AppRoutes.invoiceDetail, arguments: inv),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: EdgeInsets.all(AppSettings.compactCards ? 10 : 14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(AppSettings.compactCards ? 12 : 16),
-                          boxShadow: [BoxShadow(color: BillifyColors.primary.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 3))],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 46, height: 46,
-                              decoration: BoxDecoration(
-                                color: BillifyColors.primary.withOpacity(0.09),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.video_camera_front_rounded, color: BillifyColors.primary, size: 22),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    inv.clientName.isEmpty ? 'Unknown Client' : inv.clientName,
-                                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text('${inv.invoiceNumber}  •  ${inv.orderId}',
-                                      style: GoogleFonts.nunito(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                                  Text(AppSettings.formatDate(inv.orderDate),
-                                      style: GoogleFonts.nunito(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                if (AppSettings.showAmountOnList)
-                                  Text(fmt.format(inv.totalAmount),
-                                      style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: BillifyColors.primary)),
-                                if (AppSettings.showAmountOnList)
-                                  const SizedBox(height: 4),
-                                // Tappable status badge — opens status picker
-                                GestureDetector(
-                                  onTap: () => showStatusPicker(context, inv.id, inv.status),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: invoiceStatusBg(inv.status),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                          color: invoiceStatusColor(inv.status).withOpacity(0.4)),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          inv.status[0].toUpperCase() + inv.status.substring(1),
-                                          style: GoogleFonts.nunito(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              color: invoiceStatusColor(inv.status)),
-                                        ),
-                                        const SizedBox(width: 3),
-                                        Icon(Icons.expand_more_rounded,
-                                            size: 13,
-                                            color: invoiceStatusColor(inv.status)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
+          Expanded(child: _buildInvoiceList(context, fmt)),
         ],
       ),
     );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      backgroundColor: BillifyColors.background,
+      elevation: 0,
+      title: Text(
+        _filterStatus == 'paid_only'
+            ? 'PAID INVOICES'
+            : _filterStatus == 'pending_only'
+            ? 'PENDING INVOICES'
+            : 'INVOICE LEDGER',
+        style: GoogleFonts.poppins(
+          fontSize: 11, fontWeight: FontWeight.w900,
+          letterSpacing: 2.0, color: BillifyColors.primary,
+        ),
+      ),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(height: 1, color: BillifyColors.outlineVariant.withOpacity(0.4)),
+      ),
+      leading: _filterStatus != 'all'
+          ? IconButton(
+        icon: const Icon(Icons.arrow_back_rounded, color: BillifyColors.primary),
+        onPressed: () {
+          setState(() => _filterStatus = 'all');
+          Get.back();
+        },
+      )
+          : null,
+      actions: [
+        if (_filterStatus != 'all')
+          TextButton(
+            onPressed: () => setState(() => _filterStatus = 'all'),
+            child: Text(
+              'ALL',
+              style: GoogleFonts.poppins(
+                color: BillifyColors.primary,
+                fontWeight: FontWeight.w800,
+                fontSize: 9, letterSpacing: 1.5,
+              ),
+            ),
+          )
+        else
+          IconButton(
+            icon: const Icon(Icons.add_rounded, color: BillifyColors.primary),
+            onPressed: () => Get.toNamed(AppRoutes.invoiceCreate),
+            tooltip: 'New Invoice',
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchCtrl,
+      onChanged: (v) => setState(() => _searchQuery = v),
+      decoration: InputDecoration(
+        hintText: 'SEARCH BY CLIENT, INVOICE OR ORDER NO.',
+        hintStyle: GoogleFonts.poppins(fontSize: 9, letterSpacing: 0.8, color: BillifyColors.outlineVariant),
+        prefixIcon: const Icon(Icons.search_rounded, color: BillifyColors.primary, size: 18),
+        suffixIcon: _searchQuery.isNotEmpty
+            ? IconButton(
+          icon: const Icon(Icons.clear_rounded, size: 16, color: BillifyColors.textSecondary),
+          onPressed: () {
+            _searchCtrl.clear();
+            setState(() => _searchQuery = '');
+          },
+        )
+            : null,
+        fillColor: BillifyColors.surface,
+        filled: true,
+        border: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.4), width: 0.5)),
+        focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.primary, width: 1.5)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      ),
+    );
+  }
+
+  Widget _buildStatusFilterChips(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Container(
+        color: BillifyColors.surfaceContainer,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: ['all', 'draft', 'unpaid', 'paid', 'overdue'].map((s) {
+            final active = _filterStatus == s;
+            return GestureDetector(
+              onTap: () => setState(() => _filterStatus = s),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                margin: const EdgeInsets.only(right: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: active ? BillifyColors.primary : Colors.transparent,
+                  border: active ? null : Border.all(
+                    color: BillifyColors.outlineVariant.withOpacity(0.4), width: 0.5,
+                  ),
+                ),
+                child: Text(
+                  (s == 'all' ? 'ALL' : s.toUpperCase()),
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 9, letterSpacing: 1.0,
+                    color: active ? const Color(0xFFF7F7FF) : BillifyColors.textSecondary,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInvoiceList(BuildContext context, NumberFormat fmt) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _stream(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: BillifyColors.primary),
+          );
+        }
+
+        final invoices = _applyFilter(snap.data?.docs ?? []);
+
+        if (invoices.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 3, height: 40,
+                  color: BillifyColors.outlineVariant.withOpacity(0.3),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'NO LEDGER ENTRIES',
+                  style: GoogleFonts.poppins(
+                    fontSize: 10, fontWeight: FontWeight.w800,
+                    letterSpacing: 2.0, color: BillifyColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tap "New Invoice" to get started',
+                  style: GoogleFonts.nunito(
+                    fontSize: 13, color: BillifyColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+          itemCount: invoices.length,
+          itemBuilder: (_, i) {
+            final inv = invoices[i];
+            return _InvoiceListTile(inv: inv, fmt: fmt);
+          },
+        );
+      },
+    );
+  }
+}
+
+// ── Invoice List Tile ─────────────────────────────────────────
+
+class _InvoiceListTile extends StatelessWidget {
+  final Invoice inv;
+  final NumberFormat fmt;
+  const _InvoiceListTile({required this.inv, required this.fmt});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Get.toNamed(AppRoutes.invoiceDetail, arguments: inv),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.only(bottom: 1),
+        decoration: BoxDecoration(
+          color: BillifyColors.surface,
+          border: Border(
+            left: BorderSide(color: _statusColor(inv.status), width: 3),
+            bottom: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.2), width: 0.5),
+          ),
+        ),
+        padding: EdgeInsets.all(AppSettings.compactCards ? 10 : 14),
+        child: Row(
+          children: [
+            // Client info
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    inv.clientName.isEmpty ? 'Unknown Client' : inv.clientName,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13, fontWeight: FontWeight.w700,
+                      color: BillifyColors.textPrimary,
+                    ),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${inv.invoiceNumber}  ·  ${inv.orderId}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 8, color: BillifyColors.textSecondary, letterSpacing: 0.3,
+                    ),
+                  ),
+                  Text(
+                    AppSettings.formatDate(inv.orderDate).toUpperCase(),
+                    style: GoogleFonts.poppins(
+                      fontSize: 7, color: BillifyColors.textSecondary.withOpacity(0.7), letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Amount + status
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (AppSettings.showAmountOnList)
+                  Text(
+                    fmt.format(inv.totalAmount),
+                    style: GoogleFonts.poppins(
+                      fontSize: 13, fontWeight: FontWeight.w900,
+                      color: BillifyColors.primary, letterSpacing: -0.3,
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () => showStatusPicker(context, inv.id, inv.status),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    color: invoiceStatusBg(inv.status),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          inv.status.toUpperCase(),
+                          style: GoogleFonts.poppins(
+                            fontSize: 7, fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                            color: invoiceStatusColor(inv.status),
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Icon(Icons.expand_more_rounded, size: 10, color: invoiceStatusColor(inv.status)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _statusColor(String s) {
+    switch (s) {
+      case 'paid':    return BillifyColors.paid;
+      case 'unpaid':  return BillifyColors.unpaid;
+      case 'overdue': return BillifyColors.overdue;
+      default:        return BillifyColors.draft;
+    }
   }
 }
 
@@ -656,13 +747,10 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
       } else {
         await col.doc(inv.id).update(inv.toMap());
       }
-      // Navigate to detail/preview so user can immediately share or download.
-      // offNamed replaces create/edit in the stack so Back → invoice list.
-      Get.offNamed(AppRoutes.invoiceDetail, arguments: inv);
-      Get.snackbar('Saved ✓', 'Invoice saved — tap the button below to share or download',
+      Get.back();
+      Get.snackbar('Saved ✓', 'Invoice saved successfully',
           backgroundColor: BillifyColors.paid, colorText: Colors.white,
-          snackPosition: SnackPosition.TOP,
-          duration: const Duration(seconds: 3));
+          snackPosition: SnackPosition.TOP);
     } catch (e) {
       Get.snackbar('Error', e.toString(),
           backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
@@ -693,7 +781,7 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
       );
     }
 
-    final inv   = _inv!;
+    final inv = _inv!;
     final steps = ['Details & Client', 'Items & Summary'];
 
     return Scaffold(
@@ -703,78 +791,11 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
       ),
       body: Column(
         children: [
-
-          // ── Prefilled-from-profile banner (new invoices only) ──
           if (_isNewInvoice && _prefilled)
             _PrefilledBanner(
               onDismiss: () => setState(() => _prefilled = false),
             ),
-
-          // ── Step indicator ──────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: Row(
-              children: List.generate(steps.length, (i) {
-                final active = i == _step;
-                final done   = i < _step;
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _step = i),
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                          right: i < steps.length - 1 ? 8 : 0),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: active
-                              ? BillifyColors.primary
-                              : (done
-                              ? BillifyColors.primary.withOpacity(0.12)
-                              : Colors.white),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: active
-                                  ? BillifyColors.primary
-                                  : BillifyColors.divider),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(
-                              done
-                                  ? Icons.check_circle_rounded
-                                  : (i == 0
-                                  ? Icons.person_rounded
-                                  : Icons.receipt_rounded),
-                              color: active
-                                  ? Colors.white
-                                  : (done
-                                  ? BillifyColors.primary
-                                  : BillifyColors.textSecondary),
-                              size: 18,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(steps[i],
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.nunito(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: active
-                                        ? Colors.white
-                                        : (done
-                                        ? BillifyColors.primary
-                                        : BillifyColors.textSecondary))),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
-
-          // ── Step content ────────────────────────────────────────
+          _buildStepIndicator(context, steps),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -786,52 +807,129 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
                   : _ItemsStep(inv: inv, onChanged: () => setState(() {})),
             ),
           ),
+          _buildBottomNav(context, steps),
+        ],
+      ),
+    );
+  }
 
-          // ── Bottom navigation ───────────────────────────────────
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Row(
-                children: [
-                  if (_step > 0)
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => setState(() => _step--),
-                        icon:  const Icon(Icons.arrow_back_rounded),
-                        label: const Text('Back'),
-                        style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 50)),
+  Widget _buildStepIndicator(BuildContext context, List<String> steps) {
+    return Container(
+      decoration: BoxDecoration(
+        color: BillifyColors.surface,
+        border: Border(bottom: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.3), width: 0.5)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: List.generate(steps.length, (i) {
+          final active = i == _step;
+          final done   = i < _step;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _step = i),
+              child: Padding(
+                padding: EdgeInsets.only(right: i < steps.length - 1 ? 4 : 0),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: active
+                        ? BillifyColors.primary
+                        : done
+                        ? BillifyColors.primary.withOpacity(0.08)
+                        : BillifyColors.surfaceLow,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: active ? BillifyColors.primary : Colors.transparent,
+                        width: 2,
                       ),
                     ),
-                  if (_step > 0) const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: _saving
-                        ? const Center(
-                        child: CircularProgressIndicator(
-                            color: BillifyColors.primary))
-                        : ElevatedButton.icon(
-                      onPressed: _step < steps.length - 1
-                          ? () => setState(() => _step++)
-                          : _save,
-                      icon: Icon(_step < steps.length - 1
-                          ? Icons.arrow_forward_rounded
-                          : Icons.save_rounded),
-                      label: Text(
-                          _step < steps.length - 1
-                              ? 'Next'
-                              : 'Save Invoice',
-                          style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w600)),
-                      style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(0, 50)),
-                    ),
                   ),
-                ],
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        done
+                            ? Icons.check_rounded
+                            : (i == 0 ? Icons.person_rounded : Icons.receipt_rounded),
+                        color: active
+                            ? const Color(0xFFF7F7FF)
+                            : done
+                            ? BillifyColors.primary
+                            : BillifyColors.textSecondary,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        steps[i].toUpperCase(),
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 8, fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: active
+                              ? const Color(0xFFF7F7FF)
+                              : done
+                              ? BillifyColors.primary
+                              : BillifyColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-        ],
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildBottomNav(BuildContext context, List<String> steps) {
+    return SafeArea(
+      child: Container(
+        decoration: BoxDecoration(
+          color: BillifyColors.surface,
+          border: Border(top: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.3), width: 0.5)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+        child: Row(
+          children: [
+            if (_step > 0) ...[
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => setState(() => _step--),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                    side: const BorderSide(color: BillifyColors.primary, width: 1.5),
+                  ),
+                  child: Text('← BACK',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2)),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              flex: 2,
+              child: _saving
+                  ? const Center(child: CircularProgressIndicator(color: BillifyColors.primary))
+                  : ElevatedButton(
+                onPressed: _step < steps.length - 1
+                    ? () => setState(() => _step++)
+                    : _save,
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                  elevation: 0,
+                ),
+                child: Text(
+                  _step < steps.length - 1 ? 'NEXT →' : 'COMMIT TO LEDGER',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -846,61 +944,26 @@ class _PrefilledBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            BillifyColors.paid.withOpacity(0.12),
-            const Color(0xFFE8F5E9),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: BillifyColors.paid.withOpacity(0.35)),
+        color: BillifyColors.paid.withOpacity(0.06),
+        border: Border(left: BorderSide(color: BillifyColors.paid, width: 3)),
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color:  BillifyColors.paid.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.person_pin_rounded,
-                color: BillifyColors.paid, size: 16),
-          ),
-          const SizedBox(width: 10),
+          const Icon(Icons.check_rounded, color: BillifyColors.paid, size: 14),
+          const SizedBox(width: 8),
           Expanded(
-            child: RichText(
-              text: TextSpan(
-                text: 'Auto-filled from ',
-                style: GoogleFonts.nunito(
-                    fontSize: 12.5,
-                    color: BillifyColors.paid,
-                    fontWeight: FontWeight.w600),
-                children: [
-                  TextSpan(
-                    text: 'My Profile',
-                    style: GoogleFonts.poppins(
-                        fontSize: 12.5,
-                        color: BillifyColors.paid,
-                        fontWeight: FontWeight.w700),
-                  ),
-                  TextSpan(
-                    text: ' · Business, bank & tax details applied',
-                    style: GoogleFonts.nunito(
-                        fontSize: 11.5,
-                        color: BillifyColors.paid.withOpacity(0.8),
-                        fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
+            child: Text(
+              'AUTO-FILLED FROM PROFILE  ·  Business, bank & tax details applied',
+              style: GoogleFonts.poppins(
+                  fontSize: 9, color: BillifyColors.paid,
+                  fontWeight: FontWeight.w700, letterSpacing: 0.5),
             ),
           ),
           GestureDetector(
             onTap: onDismiss,
-            child: Icon(Icons.close_rounded,
-                color: BillifyColors.paid.withOpacity(0.6), size: 16),
+            child: Icon(Icons.close_rounded, color: BillifyColors.paid.withOpacity(0.6), size: 14),
           ),
         ],
       ),
@@ -987,134 +1050,187 @@ class _DetailsStepState extends State<_DetailsStep> {
       children: [
         _SectionTitle('Invoice Details'),
         _row2(
-          _field(_invNumCtrl,  'Invoice No.',  Icons.tag_rounded,         onChanged: (_) => _sync()),
-          _field(_orderIdCtrl, 'Order ID',     Icons.confirmation_number_rounded, onChanged: (_) => _sync()),
+          _field(_invNumCtrl, 'Invoice No.', Icons.tag_rounded,
+              onChanged: (_) => _sync()),
+          _field(_orderIdCtrl, 'Order ID', Icons.confirmation_number_rounded,
+              onChanged: (_) => _sync()),
         ),
         const SizedBox(height: 12),
-
-        // Order Date
-        GestureDetector(
-          onTap: _pickDate,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white, borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Theme.of(context).dividerColor, width: 1.5),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_today_rounded, color: BillifyColors.primary, size: 18),
-                const SizedBox(width: 10),
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Order Date', style: GoogleFonts.nunito(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                  Text(AppSettings.formatDate(_orderDate),
-                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
-                ]),
-              ],
-            ),
-          ),
-        ),
+        _buildDatePicker(context),
         const SizedBox(height: 12),
-
         _row2(
-          _field(_panCtrl, 'PAN (optional)', Icons.credit_card_rounded,        onChanged: (_) => _sync()),
-          _field(_gstCtrl, 'GST No. (optional)', Icons.receipt_long_rounded,   onChanged: (_) => _sync()),
+          _field(_panCtrl, 'PAN (optional)', Icons.credit_card_rounded,
+              onChanged: (_) => _sync()),
+          _field(_gstCtrl, 'GST No. (optional)', Icons.receipt_long_rounded,
+              onChanged: (_) => _sync()),
         ),
-
         const SizedBox(height: 20),
         _SectionTitle('Bill To — Client'),
-        _field(_cliNameCtrl,   'Client Name',     Icons.person_rounded,         onChanged: (_) => _sync()),
+        _field(_cliNameCtrl, 'Client Name', Icons.person_rounded,
+            onChanged: (_) => _sync()),
         const SizedBox(height: 10),
-        _field(_cliPhoneCtrl,  'Client Phone',    Icons.phone_rounded,           onChanged: (_) => _sync()),
+        _field(_cliPhoneCtrl, 'Client Phone', Icons.phone_rounded,
+            onChanged: (_) => _sync()),
         const SizedBox(height: 10),
-        _field(_cliAddrCtrl,   'Client Address',  Icons.location_on_rounded,     onChanged: (_) => _sync(), lines: 2),
+        _field(_cliAddrCtrl, 'Client Address', Icons.location_on_rounded,
+            onChanged: (_) => _sync(), lines: 2),
         const SizedBox(height: 10),
-        _field(_shootAddrCtrl, 'Shoot Address',   Icons.videocam_rounded,        onChanged: (_) => _sync(), lines: 2),
-
+        _field(_shootAddrCtrl, 'Shoot Address', Icons.videocam_rounded,
+            onChanged: (_) => _sync(), lines: 2),
         const SizedBox(height: 20),
         _SectionTitle('Your Business'),
-        _field(_compNameCtrl,  'Business / Studio Name', Icons.business_rounded,     onChanged: (_) => _sync()),
+        _field(_compNameCtrl, 'Business / Studio Name', Icons.business_rounded,
+            onChanged: (_) => _sync()),
         const SizedBox(height: 10),
-        // ── Logo picker ──
-        GestureDetector(
-          onTap: _pickLogo,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: (widget.inv.logoBase64.isNotEmpty || widget.inv.logoPath.isNotEmpty)
-                    ? BillifyColors.primary : BillifyColors.divider,
-                width: 1.5,
-              ),
-            ),
-            child: Row(
-              children: [
-                // Thumbnail or placeholder
-                Container(
-                  width: 56, height: 56,
-                  decoration: BoxDecoration(
-                    color: BillifyColors.primary.withOpacity(0.07),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: widget.inv.logoBase64.isNotEmpty
-                      ? Image.memory(base64Decode(widget.inv.logoBase64), fit: BoxFit.cover)
-                      : widget.inv.logoPath.isNotEmpty
-                      ? Image.file(File(widget.inv.logoPath), fit: BoxFit.cover)
-                      : const Icon(Icons.add_photo_alternate_rounded,
-                      color: BillifyColors.primary, size: 28),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        (widget.inv.logoBase64.isNotEmpty || widget.inv.logoPath.isNotEmpty)
-                            ? 'Logo selected ✓' : 'Add Company Logo',
-                        style: GoogleFonts.poppins(
-                            fontSize: 13, fontWeight: FontWeight.w600,
-                            color: (widget.inv.logoBase64.isNotEmpty || widget.inv.logoPath.isNotEmpty)
-                                ? BillifyColors.primary : BillifyColors.textPrimary),
-                      ),
-                      Text(
-                        widget.inv.logoBase64.isNotEmpty
-                            ? 'From profile — tap to change'
-                            : 'Tap to choose from gallery/camera',
-                        style: GoogleFonts.nunito(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
-                if (widget.inv.logoBase64.isNotEmpty || widget.inv.logoPath.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, color: BillifyColors.unpaid, size: 20),
-                    onPressed: () {
-                      setState(() {
-                        widget.inv.logoBase64 = '';
-                        widget.inv.logoPath   = '';
-                      });
-                      widget.onChanged();
-                    },
-                    padding: EdgeInsets.zero, constraints: const BoxConstraints(),
-                  ),
-              ],
-            ),
-          ),
-        ),
+        _buildLogoPicker(context),
         const SizedBox(height: 10),
-        const SizedBox(height: 10),
-        _field(_compAddrCtrl,  'Your Address',     Icons.location_on_outlined,   onChanged: (_) => _sync(), lines: 2),
+        _field(_compAddrCtrl, 'Your Address', Icons.location_on_outlined,
+            onChanged: (_) => _sync(), lines: 2),
         const SizedBox(height: 10),
         _row2(
-          _field(_compPhoneCtrl, 'Phone', Icons.phone_outlined, onChanged: (_) => _sync()),
-          _field(_compEmailCtrl, 'Email', Icons.email_outlined, onChanged: (_) => _sync()),
+          _field(_compPhoneCtrl, 'Phone', Icons.phone_outlined,
+              onChanged: (_) => _sync()),
+          _field(_compEmailCtrl, 'Email', Icons.email_outlined,
+              onChanged: (_) => _sync()),
         ),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  Widget _buildDatePicker(BuildContext context) {
+    return GestureDetector(
+      onTap: _pickDate,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: BillifyColors.surfaceLow,
+          border: Border.all(color: BillifyColors.outlineVariant.withOpacity(0.5), width: 0.5),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today_rounded, color: BillifyColors.primary, size: 16),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'ORDER DATE',
+                  style: GoogleFonts.poppins(
+                    fontSize: 8, letterSpacing: 1.2,
+                    color: BillifyColors.textSecondary, fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  AppSettings.formatDate(_orderDate),
+                  style: GoogleFonts.poppins(
+                    fontSize: 13, fontWeight: FontWeight.w700,
+                    color: BillifyColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            const Icon(Icons.edit_calendar_rounded, color: BillifyColors.outlineVariant, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoPicker(BuildContext context) {
+    final hasLogo = widget.inv.logoBase64.isNotEmpty ||
+        widget.inv.logoPath.isNotEmpty;
+
+    return GestureDetector(
+      onTap: _pickLogo,
+      child: Container(
+        width: double.infinity,
+        padding:
+        const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(
+            color: hasLogo ? BillifyColors.primary : BillifyColors.divider,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: BillifyColors.primary.withOpacity(0.07),
+                borderRadius: BorderRadius.zero,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: widget.inv.logoBase64.isNotEmpty
+                  ? Image.memory(
+                base64Decode(widget.inv.logoBase64),
+                fit: BoxFit.cover,
+              )
+                  : widget.inv.logoPath.isNotEmpty
+                  ? Image.file(
+                File(widget.inv.logoPath),
+                fit: BoxFit.cover,
+              )
+                  : const Icon(
+                Icons.add_photo_alternate_rounded,
+                color: BillifyColors.primary,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    hasLogo ? 'Logo selected ✓' : 'Add Company Logo',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: hasLogo
+                          ? BillifyColors.primary
+                          : BillifyColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    widget.inv.logoBase64.isNotEmpty
+                        ? 'From profile — tap to change'
+                        : 'Tap to choose from gallery/camera',
+                    style: GoogleFonts.nunito(
+                      fontSize: 11,
+                      color:
+                      Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (hasLogo)
+              IconButton(
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: BillifyColors.unpaid,
+                  size: 20,
+                ),
+                onPressed: () {
+                  setState(() {
+                    widget.inv.logoBase64 = '';
+                    widget.inv.logoPath = '';
+                  });
+                  widget.onChanged();
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1172,81 +1288,132 @@ class _ItemsStepState extends State<_ItemsStep> {
         ...inv.items.asMap().entries.map((e) => _ContentItemRow(
           index: e.key,
           item: e.value,
-          onChanged: () { setState(() {}); widget.onChanged(); },
+          onChanged: () {
+            setState(() {});
+            widget.onChanged();
+          },
           onDelete: inv.items.length > 1
-              ? () { setState(() { inv.items.removeAt(e.key); widget.onChanged(); }); }
+              ? () {
+            setState(() {
+              inv.items.removeAt(e.key);
+              widget.onChanged();
+            });
+          }
               : null,
         )),
         const SizedBox(height: 10),
         OutlinedButton.icon(
-          onPressed: () { setState(() { inv.items.add(ContentItem()); widget.onChanged(); }); },
+          onPressed: () {
+            setState(() {
+              inv.items.add(ContentItem());
+              widget.onChanged();
+            });
+          },
           icon: const Icon(Icons.add_rounded),
           label: const Text('Add Service / Item'),
-          style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 46)),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 46),
+          ),
         ),
         const SizedBox(height: 20),
-
-        // Totals preview
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Theme.of(context).dividerColor),
-          ),
-          child: Column(
-            children: [
-              _TotalRow('Sub Total',   fmt.format(inv.subTotal)),
-              if (inv.totalTax  > 0) _TotalRow('GST / Tax',   fmt.format(inv.totalTax)),
-              if (inv.totalIgst > 0) _TotalRow('IGST',        fmt.format(inv.totalIgst)),
-              const Divider(),
-              _TotalRow('Total',       fmt.format(inv.totalAmount), bold: true, highlight: true),
-            ],
-          ),
-        ),
-
+        _buildTotalsPreview(context, inv, fmt),
         const SizedBox(height: 20),
         _SectionTitle('Status'),
-        Wrap(
-          spacing: 8,
-          children: ['draft', 'unpaid', 'paid', 'overdue'].map((s) {
-            final active = _status == s;
-            return GestureDetector(
-              onTap: () { setState(() { _status = s; inv.status = s; }); widget.onChanged(); },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: active ? _statusColor(s) : Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: active ? _statusColor(s) : Theme.of(context).dividerColor),
-                ),
-                child: Text(s[0].toUpperCase() + s.substring(1),
-                    style: GoogleFonts.nunito(fontWeight: FontWeight.w700,
-                        color: active ? Colors.white : BillifyColors.textSecondary)),
-              ),
-            );
-          }).toList(),
-        ),
-
+        _buildStatusChips(context, inv),
         const SizedBox(height: 20),
         _SectionTitle('Payment Information'),
-        _field2(_bankCtrl,    'Bank Name',    Icons.account_balance_rounded, (v) => _syncPayment()),
+        _field2(_bankCtrl, 'Bank Name', Icons.account_balance_rounded,
+                (v) => _syncPayment()),
         const SizedBox(height: 10),
-        _field2(_accNameCtrl, 'Account Name', Icons.person_rounded,          (v) => _syncPayment()),
+        _field2(_accNameCtrl, 'Account Name', Icons.person_rounded,
+                (v) => _syncPayment()),
         const SizedBox(height: 10),
-        _field2(_accNumCtrl,  'Account No.',  Icons.credit_card_rounded,     (v) => _syncPayment()),
+        _field2(_accNumCtrl, 'Account No.', Icons.credit_card_rounded,
+                (v) => _syncPayment()),
         const SizedBox(height: 10),
-        _field2(_ifscCtrl,    'IFSC Code',    Icons.code_rounded,            (v) => _syncPayment()),
-
+        _field2(_ifscCtrl, 'IFSC Code', Icons.code_rounded,
+                (v) => _syncPayment()),
         const SizedBox(height: 20),
         _SectionTitle('Terms & Note'),
         TextField(
-          controller: _termsCtrl, maxLines: 3, onChanged: (_) => _syncPayment(),
-          decoration: const InputDecoration(labelText: 'Terms & Conditions', prefixIcon: Icon(Icons.description_outlined, color: BillifyColors.primary), alignLabelWithHint: true),
+          controller: _termsCtrl,
+          maxLines: 3,
+          onChanged: (_) => _syncPayment(),
+          decoration: const InputDecoration(
+            labelText: 'Terms & Conditions',
+            prefixIcon: Icon(
+              Icons.description_outlined,
+              color: BillifyColors.primary,
+            ),
+            alignLabelWithHint: true,
+          ),
         ),
         const SizedBox(height: 10),
-        _field2(_tyCtrl, 'Thank You Note', Icons.favorite_rounded, (v) => _syncPayment()),
+        _field2(_tyCtrl, 'Thank You Note', Icons.favorite_rounded,
+                (v) => _syncPayment()),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  Widget _buildTotalsPreview(
+      BuildContext context, Invoice inv, NumberFormat fmt) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Column(
+        children: [
+          _TotalRow('Sub Total', fmt.format(inv.subTotal)),
+          if (inv.totalTax > 0)
+            _TotalRow('GST / Tax', fmt.format(inv.totalTax)),
+          if (inv.totalIgst > 0)
+            _TotalRow('IGST', fmt.format(inv.totalIgst)),
+          const Divider(),
+          _TotalRow('Total', fmt.format(inv.totalAmount),
+              bold: true, highlight: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChips(BuildContext context, Invoice inv) {
+    return Wrap(
+      spacing: 8,
+      children: ['draft', 'unpaid', 'paid', 'overdue'].map((s) {
+        final active = _status == s;
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _status = s;
+              inv.status = s;
+            });
+            widget.onChanged();
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: active ? _statusColor(s) : Theme.of(context).cardColor,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(
+                color: active
+                    ? _statusColor(s)
+                    : Theme.of(context).dividerColor,
+              ),
+            ),
+            child: Text(
+              s[0].toUpperCase() + s.substring(1),
+              style: GoogleFonts.nunito(
+                fontWeight: FontWeight.w700,
+                color: active ? Colors.white : BillifyColors.textSecondary,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -1277,112 +1444,213 @@ class _ContentItemRowState extends State<_ContentItemRow> {
   late final _taxCtrl   = TextEditingController(text: widget.item.taxPercent.toString());
   late final _igstCtrl  = TextEditingController(text: widget.item.igstPercent.toString());
 
-  void _changed() { widget.onChanged(); setState(() {}); }
+  void _changed() {
+    widget.onChanged();
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final fmt  = AppSettings.currencyFmt(decimals: 2);
+    final fmt = AppSettings.currencyFmt(decimals: 2);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(14),
+        color: Colors.white,
+        borderRadius: BorderRadius.zero,
         border: Border.all(color: Theme.of(context).dividerColor),
-        boxShadow: [BoxShadow(color: BillifyColors.primary.withOpacity(0.04), blurRadius: 6)],
+        boxShadow: [
+          BoxShadow(
+            color: BillifyColors.primary.withOpacity(0.04),
+            blurRadius: 6,
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title row
-          Row(
-            children: [
-              Container(
-                width: 26, height: 26,
-                decoration: BoxDecoration(color: BillifyColors.primary, borderRadius: BorderRadius.circular(8)),
-                child: Center(child: Text('${widget.index + 1}',
-                    style: GoogleFonts.poppins(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600))),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _titleCtrl,
-                  onChanged: (v) { item.title = v; _changed(); },
-                  decoration: InputDecoration(
-                    hintText: 'Service title (e.g. Reel Shoot — 2hrs)',
-                    hintStyle: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: Theme.of(context).dividerColor, width: 1.5),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: Theme.of(context).dividerColor, width: 1.5),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: BillifyColors.primary, width: 2),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    filled: true,
-                    fillColor: Theme.of(context).scaffoldBackgroundColor,
-                  ),
-                  style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
-                ),
-              ),
-              if (widget.onDelete != null)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline_rounded, color: BillifyColors.unpaid, size: 20),
-                  onPressed: widget.onDelete,
-                  padding: EdgeInsets.zero, constraints: const BoxConstraints(),
-                ),
-            ],
+          _buildTitleRow(context, item),
+          const SizedBox(height: 10),
+          _numField(
+            _grossCtrl,
+            'Gross Amount (₹)',
+                (v) {
+              item.grossAmount = double.tryParse(v) ?? 0;
+              _changed();
+            },
+            decimal: true,
           ),
           const SizedBox(height: 10),
-
-          // Gross amount (always shown)
-          _numField(_grossCtrl, 'Gross Amount (₹)', (v) { item.grossAmount = double.tryParse(v) ?? 0; _changed(); }, decimal: true),
-          const SizedBox(height: 10),
-
-          // Optional toggles
           Wrap(
-            spacing: 8, runSpacing: 8,
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              _toggle('Qty', item.hasQty, (v) { setState(() { item.hasQty = v; }); _changed(); }),
-              _toggle('Discount', item.hasDiscount, (v) { setState(() { item.hasDiscount = v; }); _changed(); }),
-              _toggle('Tax / GST', item.hasTax, (v) { setState(() { item.hasTax = v; }); _changed(); }),
-              _toggle('IGST', item.hasIgst, (v) { setState(() { item.hasIgst = v; }); _changed(); }),
+              _toggle('Qty', item.hasQty,
+                      (v) {
+                    setState(() => item.hasQty = v);
+                    _changed();
+                  }),
+              _toggle('Discount', item.hasDiscount,
+                      (v) {
+                    setState(() => item.hasDiscount = v);
+                    _changed();
+                  }),
+              _toggle('Tax / GST', item.hasTax,
+                      (v) {
+                    setState(() => item.hasTax = v);
+                    _changed();
+                  }),
+              _toggle('IGST', item.hasIgst,
+                      (v) {
+                    setState(() => item.hasIgst = v);
+                    _changed();
+                  }),
             ],
           ),
           const SizedBox(height: 10),
-
-          // Conditional fields
           if (item.hasQty) ...[
-            _numField(_qtyCtrl, 'Quantity', (v) { item.qty = int.tryParse(v) ?? 1; _changed(); }),
+            _numField(_qtyCtrl, 'Quantity',
+                    (v) {
+                  item.qty = int.tryParse(v) ?? 1;
+                  _changed();
+                }),
             const SizedBox(height: 8),
           ],
           if (item.hasDiscount) ...[
-            _numField(_discCtrl, 'Discount (₹)', (v) { item.discount = double.tryParse(v) ?? 0; _changed(); }, decimal: true),
+            _numField(
+              _discCtrl,
+              'Discount (₹)',
+                  (v) {
+                item.discount = double.tryParse(v) ?? 0;
+                _changed();
+              },
+              decimal: true,
+            ),
             const SizedBox(height: 8),
           ],
           if (item.hasTax) ...[
-            _numField(_taxCtrl, 'Tax / GST %', (v) { item.taxPercent = double.tryParse(v) ?? AppSettings.defaultGst; _changed(); }, decimal: true),
+            _numField(
+              _taxCtrl,
+              'Tax / GST %',
+                  (v) {
+                item.taxPercent =
+                    double.tryParse(v) ?? AppSettings.defaultGst;
+                _changed();
+              },
+              decimal: true,
+            ),
             const SizedBox(height: 8),
           ],
           if (item.hasIgst) ...[
-            _numField(_igstCtrl, 'IGST %', (v) { item.igstPercent = double.tryParse(v) ?? AppSettings.defaultGst; _changed(); }, decimal: true),
+            _numField(
+              _igstCtrl,
+              'IGST %',
+                  (v) {
+                item.igstPercent =
+                    double.tryParse(v) ?? AppSettings.defaultGst;
+                _changed();
+              },
+              decimal: true,
+            ),
             const SizedBox(height: 8),
           ],
-
-          // Line total
           Align(
             alignment: Alignment.centerRight,
-            child: Text('Line Total: ${fmt.format(item.lineTotal)}',
-                style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: BillifyColors.primary)),
+            child: Text(
+              'Line Total: ${fmt.format(item.lineTotal)}',
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: BillifyColors.primary,
+              ),
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTitleRow(BuildContext context, ContentItem item) {
+    return Row(
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: BillifyColors.primary,
+            borderRadius: BorderRadius.zero,
+          ),
+          child: Center(
+            child: Text(
+              '${widget.index + 1}',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TextField(
+            controller: _titleCtrl,
+            onChanged: (v) {
+              item.title = v;
+              _changed();
+            },
+            decoration: InputDecoration(
+              hintText: 'Service title (e.g. Reel Shoot — 2hrs)',
+              hintStyle: GoogleFonts.nunito(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(
+                  color: Theme.of(context).dividerColor,
+                  width: 1.5,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(
+                  color: Theme.of(context).dividerColor,
+                  width: 1.5,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide:
+                const BorderSide(color: BillifyColors.primary, width: 2),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              filled: true,
+              fillColor: Theme.of(context).scaffoldBackgroundColor,
+            ),
+            style: GoogleFonts.nunito(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+        ),
+        if (widget.onDelete != null)
+          IconButton(
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              color: BillifyColors.unpaid,
+              size: 20,
+            ),
+            onPressed: widget.onDelete,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+      ],
     );
   }
 
@@ -1394,7 +1662,7 @@ class _ContentItemRowState extends State<_ContentItemRow> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: value ? BillifyColors.primary.withOpacity(0.1) : Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.zero,
           border: Border.all(color: value ? BillifyColors.primary : Theme.of(context).dividerColor),
         ),
         child: Row(
@@ -1419,9 +1687,9 @@ class _ContentItemRowState extends State<_ContentItemRow> {
         decoration: InputDecoration(
           labelText: label, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           isDense: true,
-          border:        OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Theme.of(context).dividerColor)),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Theme.of(context).dividerColor, width: 1.5)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: BillifyColors.primary, width: 2)),
+          border:        OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
+          focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.primary, width: 2)),
           filled: true, fillColor: Theme.of(context).scaffoldBackgroundColor,
         ),
         style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
@@ -1508,44 +1776,28 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     }
   }
 
-  // ── PDF generation — works on Web + Mobile ───────────────
-  // Uses package:printing which handles:
-  //   • Android → native share sheet via share_plus
-  //   • Web     → data-URI anchor download (no plugin needed)
+  // ── PDF generation (true PDF, not image) ──────────────────
   Future<void> _generateAndSharePdf() async {
     final inv = _inv;
     if (inv == null) return;
     setState(() => _generating = true);
-    final filename = 'invoice_${inv.invoiceNumber.replaceAll('-', '_')}.pdf';
     try {
-      final pdfDoc = await _buildPdfDocument(inv);
-      final bytes  = Uint8List.fromList(await pdfDoc.save());
+      final pdfBytes = await _buildPdf(inv);
+      final fileName = 'invoice_${inv.invoiceNumber.replaceAll('-', '_')}.pdf';
 
       if (kIsWeb) {
-        // Web: build a base64 data-URI and click a hidden <a download> via JS.
-        // No plugin required — works on any browser.
-        final base64  = base64Encode(bytes);
-        final dataUri = 'data:application/pdf;base64,$base64';
-        js.context.callMethod('eval', [
-          '''
-          (function() {
-            var a = document.createElement('a');
-            a.href = '$dataUri';
-            a.download = '$filename';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-          })();
-          '''
-        ]);
+        // ── Web: trigger a browser download ──────────────────
+        await downloadPdfOnWeb(pdfBytes, fileName);
       } else {
-        // Android / iOS: write PDF to temp file then open native share sheet
+        // ── Android / iOS / Desktop: save to temp dir & share ─
         final dir  = await getTemporaryDirectory();
-        final file = File('${dir.path}/$filename');
-        await file.writeAsBytes(bytes);
+        final file = File('${dir.path}/$fileName');
+        await file.writeAsBytes(pdfBytes);
+
         await Share.shareXFiles(
           [XFile(file.path, mimeType: 'application/pdf')],
-          subject: filename,
+          subject: 'Invoice ${inv.invoiceNumber}',
+          text: 'Please find your invoice attached.',
         );
       }
     } catch (e) {
@@ -1558,39 +1810,25 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Show loading while fetching by ID from dashboard
     if (_loading || _inv == null) {
       return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(title: const Text('Invoice Detail')),
-        body: const Center(child: CircularProgressIndicator(color: BillifyColors.primary)),
+        body: const Center(
+          child: CircularProgressIndicator(color: BillifyColors.primary),
+        ),
       );
     }
+
     final inv = _inv!;
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: Text(inv.invoiceNumber.isEmpty ? 'Invoice Detail' : inv.invoiceNumber),
-        actions: [
-          IconButton(icon: const Icon(Icons.edit_rounded), onPressed: () => Get.toNamed(AppRoutes.invoiceEdit, arguments: inv), tooltip: 'Edit'),
-          IconButton(icon: const Icon(Icons.delete_outline_rounded), onPressed: _deleteInvoice, tooltip: 'Delete'),
-          PopupMenuButton<String>(
-            onSelected: (v) { if (v == 'pdf') _generateAndSharePdf(); },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'pdf', child: Row(children: [
-                Icon(Icons.picture_as_pdf_rounded, color: BillifyColors.primary, size: 20),
-                SizedBox(width: 10),
-                Text('Share as PDF'),
-              ])),
-            ],
-          ),
-        ],
-      ),
+      appBar: _buildDetailAppBar(inv),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Tappable status banner — tap to change status
             GestureDetector(
               onTap: () => showStatusPicker(context, inv.id, inv.status),
               child: _StatusBanner(status: inv.status, showChangeTip: true),
@@ -1599,28 +1837,77 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             _InvoicePreview(inv: inv),
             const SizedBox(height: 20),
             _generating
-                ? const Center(child: CircularProgressIndicator(color: BillifyColors.primary))
-                : Column(
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _generateAndSharePdf,
-                  icon:  const Icon(Icons.picture_as_pdf_rounded),
-                  label: Text(kIsWeb ? 'Download PDF' : 'Save / Share as PDF'),
-                  style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: () => Get.toNamed(AppRoutes.invoiceEdit, arguments: inv),
-                  icon:  const Icon(Icons.edit_rounded),
-                  label: const Text('Edit Invoice'),
-                  style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
-                ),
-              ],
-            ),
+                ? const Center(
+              child: CircularProgressIndicator(
+                color: BillifyColors.primary,
+              ),
+            )
+                : _buildDetailActions(inv),
             const SizedBox(height: 30),
           ],
         ),
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildDetailAppBar(Invoice inv) {
+    return AppBar(
+      title:
+      Text(inv.invoiceNumber.isEmpty ? 'Invoice Detail' : inv.invoiceNumber),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.edit_rounded),
+          onPressed: () => Get.toNamed(AppRoutes.invoiceEdit, arguments: inv),
+          tooltip: 'Edit',
+        ),
+        IconButton(
+          icon: const Icon(Icons.delete_outline_rounded),
+          onPressed: _deleteInvoice,
+          tooltip: 'Delete',
+        ),
+        PopupMenuButton<String>(
+          onSelected: (v) {
+            if (v == 'pdf') _generateAndSharePdf();
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: 'pdf',
+              child: Row(
+                children: [
+                  Icon(Icons.picture_as_pdf_rounded,
+                      color: BillifyColors.primary, size: 20),
+                  SizedBox(width: 10),
+                  Text('Share as PDF'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailActions(Invoice inv) {
+    return Column(
+      children: [
+        ElevatedButton.icon(
+          onPressed: _generateAndSharePdf,
+          icon: const Icon(Icons.picture_as_pdf_rounded),
+          label: const Text('Save / Share as PDF'),
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 50),
+          ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: () => Get.toNamed(AppRoutes.invoiceEdit, arguments: inv),
+          icon: const Icon(Icons.edit_rounded),
+          label: const Text('Edit Invoice'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 50),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1629,7 +1916,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 //  PDF BUILDER  (using pdf package — generates a real PDF)
 // ════════════════════════════════════════════════════════════
 
-Future<pw.Document> _buildPdfDocument(Invoice inv) async {
+Future<List<int>> _buildPdf(Invoice inv) async {
   final pdf     = pw.Document();
   final dateFmt = DateFormat(AppSettings.dateFormat);
 
@@ -1914,7 +2201,7 @@ Future<pw.Document> _buildPdfDocument(Invoice inv) async {
     ),
   );
 
-  return pdf;
+  return pdf.save();
 }
 
 // PDF helper widgets
@@ -1973,7 +2260,7 @@ class _InvoicePreview extends StatelessWidget {
                     // Logo
                     if (inv.logoPath.isNotEmpty) ...[
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.zero,
                         child: Image.file(File(inv.logoPath), width: 64, height: 64, fit: BoxFit.cover),
                       ),
                       const SizedBox(height: 8),
@@ -2012,7 +2299,7 @@ class _InvoicePreview extends StatelessWidget {
           // ── Bill To ──
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(color: const Color(0xFFF5F5F5), borderRadius: BorderRadius.zero),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2196,8 +2483,20 @@ class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.text);
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Text(text, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w700, color: BillifyColors.primary)),
+    padding: const EdgeInsets.only(bottom: 10, top: 4),
+    child: Row(
+      children: [
+        Container(width: 3, height: 14, color: BillifyColors.primary),
+        const SizedBox(width: 8),
+        Text(
+          text.toUpperCase(),
+          style: GoogleFonts.poppins(
+            fontSize: 9, fontWeight: FontWeight.w800,
+            letterSpacing: 1.8, color: BillifyColors.primary,
+          ),
+        ),
+      ],
+    ),
   );
 }
 
@@ -2257,7 +2556,7 @@ class _StatusBanner extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
     decoration: BoxDecoration(
       color: _bg,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.zero,
       border: showChangeTip
           ? Border.all(color: _fg.withOpacity(0.3))
           : null,
@@ -2309,7 +2608,7 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(color: _bg, borderRadius: BorderRadius.circular(20)),
+    decoration: BoxDecoration(color: _bg, borderRadius: BorderRadius.zero),
     child: Text(status[0].toUpperCase() + status.substring(1),
         style: GoogleFonts.nunito(fontSize: 11, fontWeight: FontWeight.w700, color: _fg)),
   );

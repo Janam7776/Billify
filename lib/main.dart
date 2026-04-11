@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -15,6 +16,8 @@ import 'firebase_options.dart';
 import 'dashboard_screen.dart';
 import 'invoice_screens.dart';
 import 'expense_screens.dart';
+import 'client_screens.dart';
+import 'web_layout.dart' show WebLayoutService, WebLayoutGate, DesktopNavCallback, showWebDevicePickerDialog;
 
 // firebase_options.dart is imported above — real keys from FlutterFire CLI
 
@@ -34,7 +37,12 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-
+  // ── Register Web Layout Service ────────────────────────
+  // On non-web platforms this is a fast no-op.
+  await Get.putAsync<WebLayoutService>(
+        () => WebLayoutService().init(),
+    permanent: true,
+  );
   // Init settings (loads persisted theme before first frame)
   Get.put(SettingsController());
 
@@ -42,51 +50,59 @@ void main() async {
 }
 
 // ════════════════════════════════════════════════════════════
-//  BRAND CONSTANTS
+//  BRAND CONSTANTS — Architectural Ledger palette
 // ════════════════════════════════════════════════════════════
 class BillifyColors {
   // ── Brand ──────────────────────────────────────────────────
-  static const Color primary        = Color(0xFF1A237E);
-  static const Color primaryLight   = Color(0xFF534BAE);
-  static const Color primaryDark    = Color(0xFF000051);
-  static const Color accent         = Color(0xFFFFC107);
-  static const Color accentDark     = Color(0xFFC79100);
+  static const Color primary        = Color(0xFF3C5D9C);
+  static const Color primaryLight   = Color(0xFF5A7BB8);
+  static const Color primaryDark    = Color(0xFF2F518F);
+  static const Color accent         = Color(0xFF3C5D9C);
+  static const Color accentDark     = Color(0xFF2F518F);
 
   // ── Status ─────────────────────────────────────────────────
-  static const Color paid    = Color(0xFF2E7D32);
-  static const Color unpaid  = Color(0xFFC62828);
-  static const Color draft   = Color(0xFF757575);
-  static const Color overdue = Color(0xFFE65100);
+  static const Color paid    = Color(0xFF536073);  // secondary — settled
+  static const Color unpaid  = Color(0xFF9F403D);  // error
+  static const Color draft   = Color(0xFF717C84);  // outline
+  static const Color overdue = Color(0xFF752121);  // error-dim
 
   // ── Light palette ──────────────────────────────────────────
-  static const Color background    = Color(0xFFF5F6FA);
+  static const Color background    = Color(0xFFF7F9FC);
   static const Color surface       = Color(0xFFFFFFFF);
-  static const Color textPrimary   = Color(0xFF1A1A2E);
-  static const Color textSecondary = Color(0xFF6B7280);
-  static const Color divider       = Color(0xFFE5E7EB);
+  static const Color textPrimary   = Color(0xFF29343A);
+  static const Color textSecondary = Color(0xFF566168);
+  static const Color divider       = Color(0xFFA8B3BB);
+
+  // ── Architectural accents ──────────────────────────────────
+  static const Color sidebarBg     = Color(0xFFCEDCE5);
+  static const Color surfaceHigh   = Color(0xFFE1E9F0);
+  static const Color surfaceLow    = Color(0xFFF0F4F8);
+  static const Color surfaceContainer = Color(0xFFE8EFF4);
+  static const Color outlineVariant   = Color(0xFFA8B3BB);
 
   // ── Dark palette ───────────────────────────────────────────
-  static const Color darkBackground = Color(0xFF0D0D1A);
-  static const Color darkSurface    = Color(0xFF1C1C2E);
-  static const Color darkCard       = Color(0xFF252538);
-  static const Color darkBorder     = Color(0xFF2E2E45);
-  static const Color darkText       = Color(0xFFECECF4);
-  static const Color darkTextSub    = Color(0xFF9191A8);
+  static const Color darkBackground = Color(0xFF0B0F11);
+  static const Color darkSurface    = Color(0xFF131A1F);
+  static const Color darkCard       = Color(0xFF1C2530);
+  static const Color darkBorder     = Color(0xFF2A3540);
+  static const Color darkText       = Color(0xFFECF0F4);
+  static const Color darkTextSub    = Color(0xFF8A9BA8);
 }
 
 // ── Context-aware color resolver ──────────────────────────────
-// Light theme only — always returns light palette colors.
+// Use these everywhere instead of hardcoded BillifyColors.xxx
+// so the UI automatically adapts to light / dark mode.
 extension AppThemeContext on BuildContext {
-  bool get isDark => false; // always light
+  bool get isDark => Theme.of(this).brightness == Brightness.dark;
 
-  Color get bgColor       => BillifyColors.background;
-  Color get surfaceColor  => BillifyColors.surface;
-  Color get cardColor     => BillifyColors.surface;
-  Color get borderColor   => BillifyColors.divider;
-  Color get textPrimary   => BillifyColors.textPrimary;
-  Color get textSecondary => BillifyColors.textSecondary;
-  Color get dividerColor  => BillifyColors.divider;
-  Color get iconBg        => BillifyColors.background;
+  Color get bgColor       => isDark ? BillifyColors.darkBackground : BillifyColors.background;
+  Color get surfaceColor  => isDark ? BillifyColors.darkSurface    : BillifyColors.surface;
+  Color get cardColor     => isDark ? BillifyColors.darkCard       : BillifyColors.surface;
+  Color get borderColor   => isDark ? BillifyColors.darkBorder     : BillifyColors.divider;
+  Color get textPrimary   => isDark ? BillifyColors.darkText       : BillifyColors.textPrimary;
+  Color get textSecondary => isDark ? BillifyColors.darkTextSub    : BillifyColors.textSecondary;
+  Color get dividerColor  => isDark ? BillifyColors.darkBorder     : BillifyColors.divider;
+  Color get iconBg        => isDark ? BillifyColors.darkCard       : BillifyColors.background;
 }
 
 /// Static accessor — use Colors.white etc.
@@ -112,7 +128,7 @@ class BillifyC {
 }
 
 class BillifyTheme {
-  // ── Light Theme ──────────────────────────────────────────────
+  // ── Light Theme — Architectural Ledger ───────────────────────
   static ThemeData get light {
     final base = ThemeData(
       useMaterial3: true,
@@ -120,7 +136,7 @@ class BillifyTheme {
         seedColor:  BillifyColors.primary,
         brightness: Brightness.light,
         primary:    BillifyColors.primary,
-        secondary:  BillifyColors.accent,
+        secondary:  BillifyColors.paid,
         surface:    BillifyColors.surface,
         background: BillifyColors.background,
       ),
@@ -128,43 +144,46 @@ class BillifyTheme {
     );
     return base.copyWith(
       textTheme: GoogleFonts.poppinsTextTheme(base.textTheme).copyWith(
-        displayLarge:  GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.w700, color: BillifyColors.textPrimary),
-        displayMedium: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w700, color: BillifyColors.textPrimary),
-        displaySmall:  GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
-        headlineLarge: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
-        headlineMedium:GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
-        headlineSmall: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
-        bodyLarge:     GoogleFonts.nunito(fontSize: 16, fontWeight: FontWeight.w400, color: BillifyColors.textPrimary),
-        bodyMedium:    GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w400, color: BillifyColors.textPrimary),
-        bodySmall:     GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w400, color: BillifyColors.textSecondary),
-        labelLarge:    GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
-        labelMedium:   GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500, color: BillifyColors.textSecondary),
-        labelSmall:    GoogleFonts.nunito(fontSize: 11, fontWeight: FontWeight.w400, color: BillifyColors.textSecondary),
+        displayLarge:  GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -1.5),
+        displayMedium: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -1.0),
+        displaySmall:  GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5),
+        headlineLarge: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.5),
+        headlineMedium:GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700),
+        headlineSmall: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700),
+        bodyLarge:     GoogleFonts.nunito(fontSize: 16, fontWeight: FontWeight.w500),
+        bodyMedium:    GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w500),
+        bodySmall:     GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w400),
+        labelLarge:    GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.2),
+        labelMedium:   GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.0),
+        labelSmall:    GoogleFonts.poppins(fontSize: 9,  fontWeight: FontWeight.w700, letterSpacing: 0.8),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor:    BillifyColors.primary,
-        foregroundColor:    Colors.white,
+        backgroundColor:    BillifyColors.background,
+        foregroundColor:    BillifyColors.textPrimary,
         elevation:          0,
-        centerTitle:        true,
-        titleTextStyle:     GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
-        iconTheme:          const IconThemeData(color: Colors.white),
-        systemOverlayStyle: SystemUiOverlayStyle.light,
+        centerTitle:        false,
+        titleTextStyle:     GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w800, color: BillifyColors.primary, letterSpacing: 1.0),
+        iconTheme:          const IconThemeData(color: BillifyColors.primary),
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        surfaceTintColor:   Colors.transparent,
+        shadowColor:        Colors.transparent,
       ),
       cardTheme: CardThemeData(
         color:       BillifyColors.surface,
-        elevation:   2,
-        shadowColor: BillifyColors.primary.withOpacity(0.08),
-        shape:       RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        margin:      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        elevation:   0,
+        shadowColor: Colors.transparent,
+        shape:       const RoundedRectangleBorder(borderRadius: BorderRadius.zero,
+            side: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
+        margin:      const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: BillifyColors.primary,
-          foregroundColor: Colors.white,
-          elevation:       2,
+          foregroundColor: const Color(0xFFF7F7FF),
+          elevation:       0,
           minimumSize:     const Size(double.infinity, 52),
-          shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle:       GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+          shape:           const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          textStyle:       GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -172,62 +191,63 @@ class BillifyTheme {
           foregroundColor: BillifyColors.primary,
           side:            const BorderSide(color: BillifyColors.primary, width: 1.5),
           minimumSize:     const Size(double.infinity, 52),
-          shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle:       GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+          shape:           const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          textStyle:       GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled:    true,
-        fillColor: BillifyColors.surface,
-        border:        OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.divider)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.divider, width: 1.5)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.primary, width: 2)),
-        errorBorder:   OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: BillifyColors.unpaid,   width: 1.5)),
+        fillColor: BillifyColors.surfaceLow,
+        border:        OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: const BorderSide(color: BillifyColors.outlineVariant)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.6), width: 1.0)),
+        focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.primary, width: 2)),
+        errorBorder:   const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.unpaid, width: 1.5)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        labelStyle:  GoogleFonts.nunito(color: BillifyColors.textSecondary),
-        hintStyle:   GoogleFonts.nunito(color: BillifyColors.textSecondary),
-        prefixIconColor: BillifyColors.primary,
+        labelStyle:  GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.0, color: BillifyColors.textSecondary),
+        hintStyle:   GoogleFonts.nunito(fontSize: 13, color: BillifyColors.outlineVariant),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: BillifyColors.primary,
-        foregroundColor: Colors.white,
-        elevation: 4,
+        foregroundColor: const Color(0xFFF7F7FF),
+        elevation: 2,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor:    BillifyColors.surface,
         selectedItemColor:  BillifyColors.primary,
         unselectedItemColor:BillifyColors.textSecondary,
-        elevation: 8,
+        elevation: 0,
       ),
       drawerTheme: const DrawerThemeData(
-        backgroundColor: BillifyColors.surface,
-        elevation: 4,
+        backgroundColor: BillifyColors.sidebarBg,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       ),
-      dividerTheme: const DividerThemeData(color: BillifyColors.divider, thickness: 1),
+      dividerTheme: const DividerThemeData(color: BillifyColors.outlineVariant, thickness: 0.5),
       chipTheme: ChipThemeData(
-        backgroundColor: BillifyColors.background,
-        selectedColor:   BillifyColors.primary.withOpacity(0.15),
-        labelStyle:      GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w500, color: BillifyColors.textPrimary),
-        side:            const BorderSide(color: BillifyColors.divider),
-        shape:           RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: BillifyColors.surfaceLow,
+        selectedColor:   BillifyColors.primary,
+        labelStyle:      GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8),
+        side:            const BorderSide(color: BillifyColors.outlineVariant),
+        shape:           const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor:  BillifyColors.primary,
+        backgroundColor:  BillifyColors.textPrimary,
         contentTextStyle: GoogleFonts.nunito(color: Colors.white),
         behavior:         SnackBarBehavior.floating,
-        shape:            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape:            const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor:  BillifyColors.surface,
-        shape:            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        titleTextStyle:   GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: BillifyColors.textPrimary),
+        shape:            const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        titleTextStyle:   GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w800, color: BillifyColors.textPrimary, letterSpacing: -0.3),
         contentTextStyle: GoogleFonts.nunito(fontSize: 14, color: BillifyColors.textSecondary),
       ),
       checkboxTheme: CheckboxThemeData(
         fillColor: MaterialStateProperty.resolveWith((s) =>
         s.contains(MaterialState.selected) ? BillifyColors.primary : Colors.transparent),
         side:  const BorderSide(color: BillifyColors.primary, width: 2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: MaterialStateProperty.resolveWith((s) =>
@@ -237,21 +257,160 @@ class BillifyTheme {
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(color: BillifyColors.primary),
       tabBarTheme: TabBarThemeData(
-        labelColor:         Colors.white,
-        unselectedLabelColor: Colors.white70,
-        indicatorColor:     BillifyColors.accent,
-        labelStyle:         GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
-        unselectedLabelStyle: GoogleFonts.nunito(fontSize: 13),
+        labelColor:           BillifyColors.surface,
+        unselectedLabelColor: BillifyColors.surfaceHigh,
+        indicatorColor:       BillifyColors.accent,
+        labelStyle:           GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 1.0),
+        unselectedLabelStyle: GoogleFonts.poppins(fontSize: 11, letterSpacing: 0.8),
+      ),
+    );
+  }
+
+  // ── Dark Theme — Architectural Ledger Dark ───────────────────
+  static ThemeData get dark {
+    final base = ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor:  BillifyColors.primary,
+        brightness: Brightness.dark,
+        primary:    BillifyColors.primaryLight,
+        secondary:  BillifyColors.paid,
+        surface:    BillifyColors.darkSurface,
+        background: BillifyColors.darkBackground,
+      ),
+      scaffoldBackgroundColor: BillifyColors.darkBackground,
+    );
+    return base.copyWith(
+      textTheme: GoogleFonts.poppinsTextTheme(base.textTheme).copyWith(
+        displayLarge:  GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -1.5, color: BillifyColors.darkText),
+        displayMedium: GoogleFonts.poppins(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -1.0, color: BillifyColors.darkText),
+        displaySmall:  GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w800, color: BillifyColors.darkText),
+        headlineLarge: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w800, color: BillifyColors.darkText),
+        headlineMedium:GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700, color: BillifyColors.darkText),
+        headlineSmall: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: BillifyColors.darkText),
+        bodyLarge:     GoogleFonts.nunito(fontSize: 16, color: BillifyColors.darkText),
+        bodyMedium:    GoogleFonts.nunito(fontSize: 14, color: BillifyColors.darkText),
+        bodySmall:     GoogleFonts.nunito(fontSize: 12, color: BillifyColors.darkTextSub),
+        labelLarge:    GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: BillifyColors.darkText),
+        labelMedium:   GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.0, color: BillifyColors.darkTextSub),
+        labelSmall:    GoogleFonts.poppins(fontSize: 9,  fontWeight: FontWeight.w700, letterSpacing: 0.8, color: BillifyColors.darkTextSub),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor:    BillifyColors.darkBackground,
+        foregroundColor:    BillifyColors.darkText,
+        elevation:          0,
+        centerTitle:        false,
+        titleTextStyle:     GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w800, color: BillifyColors.primaryLight, letterSpacing: 1.0),
+        iconTheme:          const IconThemeData(color: BillifyColors.primaryLight),
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        surfaceTintColor:   Colors.transparent,
+      ),
+      cardTheme: CardThemeData(
+        color:     BillifyColors.darkCard,
+        elevation: 0,
+        shape:     const RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+          side: BorderSide(color: BillifyColors.darkBorder, width: 0.5),
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: BillifyColors.primaryLight,
+          foregroundColor: const Color(0xFFF7F7FF),
+          elevation:       0,
+          minimumSize:     const Size(double.infinity, 52),
+          shape:           const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          textStyle:       GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: BillifyColors.primaryLight,
+          side:            const BorderSide(color: BillifyColors.primaryLight, width: 1.5),
+          minimumSize:     const Size(double.infinity, 52),
+          shape:           const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          textStyle:       GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled:    true,
+        fillColor: BillifyColors.darkCard,
+        border:        const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.darkBorder)),
+        enabledBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.darkBorder, width: 1.0)),
+        focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.primaryLight, width: 2)),
+        errorBorder:   const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.unpaid, width: 1.5)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        labelStyle:  GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.0, color: BillifyColors.darkTextSub),
+        hintStyle:   GoogleFonts.nunito(color: BillifyColors.darkTextSub),
+        prefixIconColor: BillifyColors.primaryLight,
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: BillifyColors.primaryLight,
+        foregroundColor: const Color(0xFFF7F7FF),
+        elevation: 0,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor:     BillifyColors.darkSurface,
+        selectedItemColor:   BillifyColors.primaryLight,
+        unselectedItemColor: BillifyColors.darkTextSub,
+        elevation: 0,
+      ),
+      drawerTheme: const DrawerThemeData(
+        backgroundColor: BillifyColors.darkSurface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      ),
+      dividerTheme: const DividerThemeData(color: BillifyColors.darkBorder, thickness: 0.5),
+      chipTheme: ChipThemeData(
+        backgroundColor: BillifyColors.darkCard,
+        selectedColor:   BillifyColors.primaryLight,
+        labelStyle:      GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.8, color: BillifyColors.darkText),
+        side:            const BorderSide(color: BillifyColors.darkBorder),
+        shape:           const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor:  BillifyColors.darkCard,
+        contentTextStyle: GoogleFonts.nunito(color: BillifyColors.darkText),
+        behavior:         SnackBarBehavior.floating,
+        shape:            const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor:  BillifyColors.darkSurface,
+        shape:            const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        titleTextStyle:   GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w800, color: BillifyColors.darkText, letterSpacing: -0.3),
+        contentTextStyle: GoogleFonts.nunito(fontSize: 14, color: BillifyColors.darkTextSub),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: MaterialStateProperty.resolveWith((s) =>
+        s.contains(MaterialState.selected) ? BillifyColors.primaryLight : Colors.transparent),
+        side:  const BorderSide(color: BillifyColors.primaryLight, width: 2),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: MaterialStateProperty.resolveWith((s) =>
+        s.contains(MaterialState.selected) ? BillifyColors.primaryLight : BillifyColors.darkTextSub),
+        trackColor: MaterialStateProperty.resolveWith((s) =>
+        s.contains(MaterialState.selected) ? BillifyColors.primaryLight.withOpacity(0.4) : BillifyColors.darkBorder),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: BillifyColors.primaryLight),
+      tabBarTheme: TabBarThemeData(
+        labelColor:          BillifyColors.darkText,
+        unselectedLabelColor:BillifyColors.darkTextSub,
+        indicatorColor:      BillifyColors.primaryLight,
+        labelStyle:          GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 1.0),
+        unselectedLabelStyle:GoogleFonts.poppins(fontSize: 11, letterSpacing: 0.8),
       ),
       listTileTheme: const ListTileThemeData(
         tileColor:      Colors.transparent,
-        textColor:      BillifyColors.textPrimary,
-        iconColor:      BillifyColors.textSecondary,
+        textColor:      BillifyColors.darkText,
+        iconColor:      BillifyColors.darkTextSub,
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color:       BillifyColors.surface,
-        shape:       RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle:   GoogleFonts.nunito(color: BillifyColors.textPrimary, fontSize: 14),
+        color:       BillifyColors.darkCard,
+        shape:       const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        textStyle:   GoogleFonts.nunito(color: BillifyColors.darkText, fontSize: 14),
       ),
     );
   }
@@ -274,6 +433,10 @@ class AppRoutes {
   static const invoiceDetail    = '/invoice-detail';
   static const expenses         = '/expenses';
   static const expenseAdd       = '/expense-add';
+  static const clients          = '/clients';
+  static const clientAdd        = '/client-add';
+  static const clientEdit       = '/client-edit';
+  static const clientDetail     = '/client-detail';
   static const profile          = '/profile';
   static const settings         = '/settings';
   static const lock             = '/lock';
@@ -356,9 +519,14 @@ class _BillifyAppState extends State<BillifyApp>
       title:           'Billify',
       debugShowCheckedModeBanner: false,
 
-      // ── Themes — light only ──
+      // ── Themes — driven by SettingsController ──
       theme:     BillifyTheme.light,
-      themeMode: ThemeMode.light,
+      darkTheme: BillifyTheme.dark,
+      themeMode: ThemeMode.system,
+
+      // ── Web layout gate (device picker + persistent desktop rail) ──
+      builder: (context, child) =>
+          WebLayoutGate(child: child ?? const SizedBox.shrink()),
 
       // ── Default route ──
       initialRoute: AppRoutes.splash,
@@ -441,6 +609,34 @@ class _BillifyAppState extends State<BillifyApp>
           middlewares: [AuthMiddleware()],
         ),
         GetPage(
+          name:       AppRoutes.clients,
+          page:       () => const ClientListScreen(),
+          transition: Transition.rightToLeft,
+          middlewares: [AuthMiddleware()],
+        ),
+        GetPage(
+          name:       AppRoutes.clientAdd,
+          page:       () => const ClientFormScreen(),
+          transition: Transition.rightToLeft,
+          middlewares: [AuthMiddleware()],
+        ),
+        GetPage(
+          name:       AppRoutes.clientEdit,
+          page:       () => ClientFormScreen(
+            clientId: Get.arguments as String?,
+          ),
+          transition: Transition.rightToLeft,
+          middlewares: [AuthMiddleware()],
+        ),
+        GetPage(
+          name:       AppRoutes.clientDetail,
+          page:       () => ClientDetailScreen(
+            clientId: Get.arguments as String,
+          ),
+          transition: Transition.rightToLeft,
+          middlewares: [AuthMiddleware()],
+        ),
+        GetPage(
           name:       AppRoutes.profile,
           page:       () => const ProfileScreen(),
           transition: Transition.rightToLeft,
@@ -496,7 +692,7 @@ class _SplashScreenState extends State<SplashScreen>
     _navigate();
   }
 
-  /// Decides where to send the user after splash
+  /// Decides where to send the user after splash.
   Future<void> _navigate() async {
     await Future.delayed(const Duration(milliseconds: 2400));
 
@@ -505,9 +701,19 @@ class _SplashScreenState extends State<SplashScreen>
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      // Not logged in → Login
+      // Not logged in → Login (device picker shown after login succeeds)
       Get.offAllNamed(AppRoutes.login);
       return;
+    }
+
+    // Already logged in — still need to show device picker if not chosen yet
+    if (kIsWeb) {
+      final svc = WebLayoutService.to;
+      if (!svc.hasChosen) {
+        final choice = await showWebDevicePickerDialog(context);
+        await svc.setMode(choice);
+      }
+      if (!mounted) return;
     }
 
     // Logged in — check if terms have been accepted
@@ -543,85 +749,127 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: BillifyColors.primary,
-      body: Center(
-        child: FadeTransition(
-          opacity: _fadeAnim,
-          child: ScaleTransition(
-            scale: _scaleAnim,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Logo container
-                Container(
-                  width:  100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color:      Colors.black.withOpacity(0.2),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
+      body: Stack(
+        children: [
+          // Architectural grid dot pattern
+          Positioned.fill(
+            child: CustomPaint(painter: _ArchGridPainter()),
+          ),
+          Center(
+            child: FadeTransition(
+              opacity: _fadeAnim,
+              child: ScaleTransition(
+                scale: _scaleAnim,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Logo container — sharp rectangle
+                    Container(
+                      width:  90,
+                      height: 90,
+                      color: const Color(0xFFF7F7FF),
+                      child: const Center(
+                        child: Icon(
+                          Icons.receipt_long_rounded,
+                          color: BillifyColors.primary,
+                          size: 48,
+                        ),
                       ),
-                    ],
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.receipt_long_rounded,
-                      color: BillifyColors.primary,
-                      size: 56,
                     ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // App name
-                Text(
-                  'Billify',
-                  style: GoogleFonts.poppins(
-                    fontSize:   38,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Smart Invoicing. Simple Finance.',
-                  style: GoogleFonts.nunito(
-                    fontSize: 14,
-                    color:    Colors.white70,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 40),
-                // Loading indicator
-                SizedBox(
-                  width:  40,
-                  height: 40,
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      BillifyColors.accent,
+                    const SizedBox(height: 24),
+                    // App name — architectural heavy type
+                    Text(
+                      'BILLIFY',
+                      style: GoogleFonts.poppins(
+                        fontSize:   36,
+                        fontWeight: FontWeight.w900,
+                        color: const Color(0xFFF7F7FF),
+                        letterSpacing: 6.0,
+                      ),
                     ),
-                    strokeWidth: 3,
-                  ),
+                    const SizedBox(height: 6),
+                    // Horizontal rule
+                    Container(
+                      width: 48,
+                      height: 2,
+                      color: const Color(0xFFF7F7FF).withOpacity(0.4),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'SMART INVOICING  //  SIMPLE FINANCE',
+                      style: GoogleFonts.poppins(
+                        fontSize: 9,
+                        color: const Color(0xFFF7F7FF).withOpacity(0.6),
+                        letterSpacing: 2.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 48),
+                    // Loading indicator — thin line style
+                    SizedBox(
+                      width:  32,
+                      height: 32,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          const Color(0xFFF7F7FF).withOpacity(0.7),
+                        ),
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+          // Version tag bottom
+          Positioned(
+            bottom: 32,
+            left: 0, right: 0,
+            child: FadeTransition(
+              opacity: _fadeAnim,
+              child: Text(
+                'SYSTEM V1.0.0  //  CORE PROTOCOL',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 8,
+                  color: const Color(0xFFF7F7FF).withOpacity(0.35),
+                  letterSpacing: 2.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
 
+// ── Architectural dot-grid background painter ─────────────────
+class _ArchGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFF7F7FF).withOpacity(0.08)
+      ..strokeWidth = 1;
+    const spacing = 24.0;
+    for (double x = 0; x <= size.width; x += spacing) {
+      for (double y = 0; y <= size.height; y += spacing) {
+        canvas.drawCircle(Offset(x, y), 1.0, paint);
+      }
+    }
+  }
+  @override
+  bool shouldRepaint(_ArchGridPainter old) => false;
+}
+
+
 // ════════════════════════════════════════════════════════════
 //  SHARED DIALOG / SHEET DESIGN SYSTEM
-//  All popups in the app use these helpers for visual consistency.
 // ════════════════════════════════════════════════════════════
 
-/// Rounded dialog base — used for all AlertDialog-style popups.
+/// Architectural dialog — sharp corners, heavy typography
 class BillifyDialog extends StatelessWidget {
   final IconData icon;
   final Color    iconColor;
@@ -647,74 +895,81 @@ class BillifyDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Icon badge
-            Container(
-              width: 64, height: 64,
-              decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: iconColor, size: 30),
-            ),
-            const SizedBox(height: 18),
-            // Title
-            Text(title,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(
-                    fontSize: 17, fontWeight: FontWeight.w700,
-                    color: Theme.of(context).colorScheme.onSurface)),
-            const SizedBox(height: 10),
-            // Body
-            Text(body,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.nunito(
-                    fontSize: 14, height: 1.5,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            const SizedBox(height: 24),
-            // Buttons — stacked
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: confirmColor,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                onPressed: onConfirm,
-                child: Text(confirmLabel,
-                    style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w700, fontSize: 14,
-                        color: Colors.white)),
-              ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              height: 44,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                ),
-                onPressed: () => Get.back(result: false),
-                child: Text(cancelLabel,
-                    style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600, fontSize: 14,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Colored top bar
+          Container(height: 3, color: iconColor),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Icon row
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    color: iconColor.withOpacity(0.1),
+                    child: Icon(icon, color: iconColor, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(title.toUpperCase(),
+                        style: GoogleFonts.poppins(
+                            fontSize: 14, fontWeight: FontWeight.w900,
+                            letterSpacing: 0.8,
+                            color: Theme.of(context).colorScheme.onSurface)),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                // Body
+                Text(body,
+                    style: GoogleFonts.nunito(
+                        fontSize: 14, height: 1.6,
                         color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ),
+                const SizedBox(height: 24),
+                // Buttons
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: confirmColor,
+                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                      elevation: 0,
+                    ),
+                    onPressed: onConfirm,
+                    child: Text(confirmLabel.toUpperCase(),
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w800, fontSize: 11,
+                            letterSpacing: 1.5,
+                            color: Colors.white)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                    ),
+                    onPressed: () => Get.back(result: false),
+                    child: Text(cancelLabel.toUpperCase(),
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700, fontSize: 11,
+                            letterSpacing: 1.2,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -756,88 +1011,91 @@ class BillifyInputDialogState extends State<BillifyInputDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 26, 24, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: BillifyColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(widget.icon,
-                    color: BillifyColors.primary, size: 18),
-              ),
-              const SizedBox(width: 12),
-              Text(widget.title,
-                  style: GoogleFonts.poppins(
-                      fontSize: 16, fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface)),
-            ]),
-            const SizedBox(height: 18),
-            // Field
-            TextField(
-              controller: _ctrl,
-              keyboardType: widget.keyboard,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: widget.hint,
-                prefixIcon: Icon(widget.icon,
-                    color: BillifyColors.primary, size: 18),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surface,
-              ),
-              style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w600, fontSize: 15),
-            ),
-            const SizedBox(height: 20),
-            // Actions
-            Row(children: [
-              Expanded(
-                child: TextButton(
-                  style: TextButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                    minimumSize: const Size(0, 46),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Top accent bar
+          Container(height: 3, color: BillifyColors.primary),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    color: BillifyColors.primary.withOpacity(0.1),
+                    child: Icon(widget.icon, color: BillifyColors.primary, size: 16),
                   ),
-                  onPressed: () => Get.back(),
-                  child: Text('Cancel',
+                  const SizedBox(width: 10),
+                  Text(widget.title.toUpperCase(),
                       style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    minimumSize: const Size(0, 46),
-                    elevation: 0,
+                          fontSize: 11, fontWeight: FontWeight.w900,
+                          letterSpacing: 1.2,
+                          color: Theme.of(context).colorScheme.onSurface)),
+                ]),
+                const SizedBox(height: 16),
+                // Field
+                TextField(
+                  controller: _ctrl,
+                  keyboardType: widget.keyboard,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: widget.hint,
+                    prefixIcon: Icon(widget.icon, color: BillifyColors.primary, size: 16),
+                    filled: true,
+                    fillColor: BillifyColors.surfaceLow,
                   ),
-                  onPressed: () => Get.back(result: _ctrl.text.trim()),
-                  child: Text('Save',
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
                 ),
-              ),
-            ]),
-          ],
-        ),
+                const SizedBox(height: 16),
+                // Actions
+                Row(children: [
+                  Expanded(
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                        minimumSize: const Size(0, 44),
+                      ),
+                      onPressed: () => Get.back(),
+                      child: Text('CANCEL',
+                          style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700, fontSize: 10,
+                              letterSpacing: 1.2,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                        minimumSize: const Size(0, 44),
+                        elevation: 0,
+                      ),
+                      onPressed: () => Get.back(result: _ctrl.text.trim()),
+                      child: Text('SAVE',
+                          style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w800, fontSize: 10,
+                              letterSpacing: 1.5)),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Image source picker — bottom-sheet style two-option sheet.
+/// Image source picker — architectural bottom sheet.
 class BillifyImageSourceSheet extends StatelessWidget {
   final String title;
   const BillifyImageSourceSheet({this.title = 'Choose Source'});
@@ -845,59 +1103,57 @@ class BillifyImageSourceSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 36),
+      color: BillifyColors.surface,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle
-          Center(
-            child: Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                  color: Theme.of(context).dividerColor,
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Text(title,
-              style: GoogleFonts.poppins(
-                  fontSize: 16, fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface)),
-          const SizedBox(height: 18),
-          BillifySourceOption(
-            icon: Icons.photo_library_rounded,
-            label: 'Choose from Gallery',
-            subtitle: 'Pick an existing photo',
-            color: BillifyColors.primary,
-            onTap: () => Get.back(result: ImageSource.gallery),
-          ),
-          const SizedBox(height: 10),
-          BillifySourceOption(
-            icon: Icons.camera_alt_rounded,
-            label: 'Take a Photo',
-            subtitle: 'Use camera to capture',
-            color: const Color(0xFF00897B),
-            onTap: () => Get.back(result: ImageSource.camera),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: TextButton(
-              style: TextButton.styleFrom(
-                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-                minimumSize: const Size(0, 44),
-              ),
-              onPressed: () => Get.back(),
-              child: Text('Cancel',
-                  style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          // Top accent bar
+          Container(height: 3, color: BillifyColors.primary),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title.toUpperCase(),
+                    style: GoogleFonts.poppins(
+                        fontSize: 11, fontWeight: FontWeight.w900,
+                        letterSpacing: 1.5,
+                        color: BillifyColors.primary)),
+                const SizedBox(height: 16),
+                BillifySourceOption(
+                  icon: Icons.photo_library_rounded,
+                  label: 'Gallery',
+                  subtitle: 'Pick an existing photo',
+                  color: BillifyColors.primary,
+                  onTap: () => Get.back(result: ImageSource.gallery),
+                ),
+                const SizedBox(height: 8),
+                BillifySourceOption(
+                  icon: Icons.camera_alt_rounded,
+                  label: 'Camera',
+                  subtitle: 'Take a new photo',
+                  color: const Color(0xFF536073),
+                  onTap: () => Get.back(result: ImageSource.camera),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      backgroundColor: BillifyColors.surfaceLow,
+                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                      minimumSize: const Size(0, 44),
+                    ),
+                    onPressed: () => Get.back(),
+                    child: Text('CANCEL',
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700, fontSize: 10,
+                            letterSpacing: 1.5,
+                            color: BillifyColors.textSecondary)),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -926,25 +1182,23 @@ class BillifySourceOption extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2)),
+        color: BillifyColors.surfaceLow,
+        border: Border(left: BorderSide(color: color, width: 3)),
       ),
       child: Row(children: [
         Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12)),
-          child: Icon(icon, color: color, size: 22),
+          padding: const EdgeInsets.all(8),
+          color: color.withOpacity(0.1),
+          child: Icon(icon, color: color, size: 20),
         ),
         const SizedBox(width: 14),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label,
+            Text(label.toUpperCase(),
                 style: GoogleFonts.poppins(
-                    fontSize: 14, fontWeight: FontWeight.w600,
+                    fontSize: 11, fontWeight: FontWeight.w800,
+                    letterSpacing: 1.0,
                     color: Theme.of(context).colorScheme.onSurface)),
             Text(subtitle,
                 style: GoogleFonts.nunito(
@@ -956,7 +1210,7 @@ class BillifySourceOption extends StatelessWidget {
   );
 }
 
-// ─── Generic Options Sheet ────────────────────────────────────────────────────
+// ─── Generic Options Sheet ─────────────────────────────────────────────────────
 class BillifyOptionsSheet<T> extends StatelessWidget {
   final String            title;
   final List<T>           options;
@@ -975,91 +1229,65 @@ class BillifyOptionsSheet<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 36),
+      color: BillifyColors.surface,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                  color: Theme.of(context).dividerColor,
-                  borderRadius: BorderRadius.circular(2)),
+          // Top accent bar
+          Container(height: 3, color: BillifyColors.primary),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title.toUpperCase(),
+                    style: GoogleFonts.poppins(
+                        fontSize: 11, fontWeight: FontWeight.w900,
+                        letterSpacing: 1.5, color: BillifyColors.primary)),
+                const SizedBox(height: 12),
+                ...options.map((opt) {
+                  final isSelected = opt == current;
+                  return GestureDetector(
+                    onTap: () { Get.back(); onSelect(opt); },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? BillifyColors.primary.withOpacity(0.06)
+                            : BillifyColors.surfaceLow,
+                        border: Border(
+                          left: BorderSide(
+                            color: isSelected ? BillifyColors.primary : Colors.transparent,
+                            width: 3,
+                          ),
+                        ),
+                      ),
+                      child: Row(children: [
+                        Expanded(
+                          child: Text(label(opt).toUpperCase(),
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                letterSpacing: 0.8,
+                                color: isSelected
+                                    ? BillifyColors.primary
+                                    : BillifyColors.textPrimary,
+                              )),
+                        ),
+                        if (isSelected)
+                          const Icon(Icons.check_rounded,
+                              color: BillifyColors.primary, size: 16),
+                      ]),
+                    ),
+                  );
+                }),
+              ],
             ),
           ),
-          const SizedBox(height: 18),
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: BillifyColors.primary.withOpacity(0.09),
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: const Icon(Icons.tune_rounded,
-                  color: BillifyColors.primary, size: 16),
-            ),
-            const SizedBox(width: 10),
-            Text(title,
-                style: GoogleFonts.poppins(
-                    fontSize: 16, fontWeight: FontWeight.w700,
-                    color: Theme.of(context).colorScheme.onSurface)),
-          ]),
-          const SizedBox(height: 16),
-          ...options.map((opt) {
-            final isSelected = opt == current;
-            return GestureDetector(
-              onTap: () { Get.back(); onSelect(opt); },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? BillifyColors.primary.withOpacity(0.07)
-                      : Theme.of(context).scaffoldBackgroundColor,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isSelected ? BillifyColors.primary : BillifyColors.divider,
-                    width: isSelected ? 1.5 : 1,
-                  ),
-                ),
-                child: Row(children: [
-                  // Selection dot
-                  Container(
-                    width: 18, height: 18,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isSelected ? BillifyColors.primary : Colors.transparent,
-                      border: Border.all(
-                        color: isSelected ? BillifyColors.primary : BillifyColors.textSecondary.withOpacity(0.4),
-                        width: 2,
-                      ),
-                    ),
-                    child: isSelected
-                        ? const Icon(Icons.check_rounded,
-                        color: Colors.white, size: 11)
-                        : null,
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(label(opt),
-                        style: GoogleFonts.nunito(
-                          fontSize: 14,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                          color: isSelected
-                              ? BillifyColors.primary
-                              : BillifyColors.textPrimary,
-                        )),
-                  ),
-                ]),
-              ),
-            );
-          }),
         ],
       ),
     );
@@ -1144,263 +1372,219 @@ class _BillifyDrawerState extends State<BillifyDrawer>
     final authUser      = FirebaseAuth.instance.currentUser;
     final emailVerified = authUser?.emailVerified ?? false;
 
-    return Drawer(
-      width: 288,
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      child: FadeTransition(
-        opacity: _fadeAnim,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: const BorderRadius.only(
-              topRight:    Radius.circular(24),
-              bottomRight: Radius.circular(24),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color:      BillifyColors.primary.withOpacity(0.18),
-                blurRadius: 32,
-                offset:     const Offset(8, 0),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: const BorderRadius.only(
-              topRight:    Radius.circular(24),
-              bottomRight: Radius.circular(24),
-            ),
-            child: Column(
-              children: [
-                // ── Rich Header ────────────────────────────
-                StreamBuilder<DocumentSnapshot>(
-                  stream: authUser == null
-                      ? const Stream.empty()
-                      : FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(authUser.uid)
-                      .snapshots(),
-                  builder: (context, snap) {
-                    final data = (snap.data?.data() as Map<String, dynamic>?) ?? {};
-                    final displayName  = data['fullName']     as String?
-                        ?? authUser?.displayName ?? 'Billify User';
-                    final businessName = data['businessName'] as String? ?? '';
-                    final email        = data['email']        as String?
-                        ?? authUser?.email ?? '';
-                    final missing      = _drawerMissingCount(data);
-                    final initials     = displayName.isNotEmpty
-                        ? displayName[0].toUpperCase() : 'B';
+    // On desktop the rail renders this widget directly (no Drawer wrapper).
+    // On mobile, WebScaffold passes it to Scaffold(drawer:) which adds the
+    // Drawer overlay behaviour automatically.
+    return FadeTransition(
+      opacity: _fadeAnim,
+      child: Container(
+        width: 272,
+        color: BillifyColors.sidebarBg,
+        child: Column(
+          children: [
+            // ── Scrollable top section ────────────────────
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // ── Brand Header ──────────────────────────────
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: authUser == null
+                          ? const Stream.empty()
+                          : FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(authUser.uid)
+                          .snapshots(),
+                      builder: (context, snap) {
+                        final data = (snap.data?.data() as Map<String, dynamic>?) ?? {};
+                        final displayName  = data['fullName']     as String?
+                            ?? authUser?.displayName ?? 'Billify User';
+                        final businessName = data['businessName'] as String? ?? '';
+                        final email        = data['email']        as String?
+                            ?? authUser?.email ?? '';
+                        final missing      = _drawerMissingCount(data);
+                        final initials     = displayName.isNotEmpty
+                            ? displayName[0].toUpperCase() : 'B';
 
-                    return _DrawerHeader(
-                      displayName:   displayName,
-                      businessName:  businessName,
-                      email:         email,
-                      emailVerified: emailVerified,
-                      logoBase64:    _logoBase64,
-                      initials:      initials,
-                      missingCount:  missing,
-                      onProfileTap: () {
-                        Navigator.of(context).pop();
-                        Get.offAllNamed(AppRoutes.dashboard);
-                        Get.toNamed(AppRoutes.profile);
+                        return _DrawerHeader(
+                          displayName:   displayName,
+                          businessName:  businessName,
+                          email:         email,
+                          emailVerified: emailVerified,
+                          logoBase64:    _logoBase64,
+                          initials:      initials,
+                          missingCount:  missing,
+                          onProfileTap: () {
+                            final cb = DesktopNavCallback.maybeOf(context);
+                            if (cb != null) { cb.navigate(AppRoutes.profile); return; }
+                            Navigator.of(context).pop();
+                            Get.offAllNamed(AppRoutes.dashboard);
+                            Get.toNamed(AppRoutes.profile);
+                          },
+                        );
                       },
-                    );
-                  },
-                ),
-
-                // ── Profile incomplete banner ───────────────
-                StreamBuilder<DocumentSnapshot>(
-                  stream: authUser == null
-                      ? const Stream.empty()
-                      : FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(authUser.uid)
-                      .snapshots(),
-                  builder: (context, snap) {
-                    final data    = (snap.data?.data() as Map<String, dynamic>?) ?? {};
-                    final missing = _drawerMissingCount(data);
-                    if (missing == 0 && _logoBase64 != null) {
-                      return const SizedBox.shrink();
-                    }
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        Get.offAllNamed(AppRoutes.dashboard);
-                        Get.toNamed(AppRoutes.profile);
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 9),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              const Color(0xFFE8F0FE),
-                              BillifyColors.primary.withOpacity(0.08),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: BillifyColors.primary.withOpacity(0.2)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(5),
-                              decoration: BoxDecoration(
-                                color:  BillifyColors.primary.withOpacity(0.12),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.edit_rounded,
-                                  color: BillifyColors.primary, size: 12),
-                            ),
-                            const SizedBox(width: 9),
-                            Expanded(
-                              child: Text(
-                                'Complete profile · $missing pending',
-                                style: GoogleFonts.nunito(
-                                    fontSize: 12,
-                                    color: BillifyColors.primary,
-                                    fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                            const Icon(Icons.chevron_right_rounded,
-                                color: BillifyColors.primary, size: 16),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
-                // ── Scrollable nav + footer ────────────────
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.zero,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-
-                        // ── Section label: Main ─────────────────────
-                        _DrawerSectionLabel(label: 'MAIN'),
-
-                        // ── Nav Items ──────────────────────────────
-                        _NavItem(
-                          icon:        Icons.dashboard_rounded,
-                          label:       'Dashboard',
-                          route:       AppRoutes.dashboard,
-                          activeRoute: widget.activeRoute,
-                        ),
-                        _NavItem(
-                          icon:        Icons.receipt_long_rounded,
-                          label:       'Invoices',
-                          route:       AppRoutes.invoices,
-                          activeRoute: widget.activeRoute,
-                        ),
-                        _NavItem(
-                          icon:        Icons.account_balance_wallet_rounded,
-                          label:       'Expenses & Income',
-                          route:       AppRoutes.expenses,
-                          activeRoute: widget.activeRoute,
-                        ),
-                        _NavItem(
-                          icon:        Icons.person_rounded,
-                          label:       'My Profile',
-                          route:       AppRoutes.profile,
-                          activeRoute: widget.activeRoute,
-                        ),
-
-                        // ── Section label: More ─────────────────────
-                        _DrawerSectionLabel(label: 'MORE'),
-
-                        _NavItem(
-                          icon:        Icons.description_rounded,
-                          label:       'Terms & Conditions',
-                          route:       AppRoutes.termsConditions,
-                          activeRoute: widget.activeRoute,
-                        ),
-                        _NavItem(
-                          icon:        Icons.settings_rounded,
-                          label:       'Settings',
-                          route:       AppRoutes.settings,
-                          activeRoute: widget.activeRoute,
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // ── Logout ─────────────────────────────────
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-                          child: Material(
-                            color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(14),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(14),
-                              onTap: _logout,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 13),
-                                decoration: BoxDecoration(
-                                  color: BillifyColors.unpaid.withOpacity(0.06),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                      color: BillifyColors.unpaid.withOpacity(0.18)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(7),
-                                      decoration: BoxDecoration(
-                                        color:  BillifyColors.unpaid.withOpacity(0.1),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(Icons.logout_rounded,
-                                          color: BillifyColors.unpaid, size: 16),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text('Sign Out',
-                                        style: GoogleFonts.poppins(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: BillifyColors.unpaid)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        // ── Version footer ─────────────────────────
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 20, top: 4),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 5, height: 5,
-                                decoration: const BoxDecoration(
-                                    color: BillifyColors.primary,
-                                    shape: BoxShape.circle),
-                              ),
-                              const SizedBox(width: 6),
-                              Text('Billify  v1.0.0',
-                                  style: GoogleFonts.poppins(
-                                      fontSize: 10,
-                                      letterSpacing: 1.2,
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant
-                                          .withOpacity(0.6),
-                                      fontWeight: FontWeight.w500)),
-                            ],
-                          ),
-                        ),
-
-                      ],
                     ),
+
+                    // ── Profile incomplete banner ──────────────────
+                    StreamBuilder<DocumentSnapshot>(
+                      stream: authUser == null
+                          ? const Stream.empty()
+                          : FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(authUser.uid)
+                          .snapshots(),
+                      builder: (context, snap) {
+                        final data    = (snap.data?.data() as Map<String, dynamic>?) ?? {};
+                        final missing = _drawerMissingCount(data);
+                        if (missing == 0 && _logoBase64 != null) {
+                          return const SizedBox.shrink();
+                        }
+                        return GestureDetector(
+                          onTap: () {
+                            final cb = DesktopNavCallback.maybeOf(context);
+                            if (cb != null) { cb.navigate(AppRoutes.profile); return; }
+                            Navigator.of(context).pop();
+                            Get.offAllNamed(AppRoutes.dashboard);
+                            Get.toNamed(AppRoutes.profile);
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.fromLTRB(0, 0, 0, 0),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: BillifyColors.primary.withOpacity(0.08),
+                              border: const Border(
+                                left: BorderSide(color: BillifyColors.primary, width: 3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.edit_note_rounded,
+                                    color: BillifyColors.primary, size: 14),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '$missing field${missing != 1 ? 's' : ''} pending',
+                                    style: GoogleFonts.poppins(
+                                        fontSize: 10,
+                                        letterSpacing: 0.8,
+                                        color: BillifyColors.primary,
+                                        fontWeight: FontWeight.w800),
+                                  ),
+                                ),
+                                const Icon(Icons.chevron_right_rounded,
+                                    color: BillifyColors.primary, size: 14),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // ── Section label: Main ──────────────────────
+                    _DrawerSectionLabel(label: 'MAIN'),
+
+                    // ── Nav Items ────────────────────────────────
+                    _NavItem(
+                      icon:        Icons.dashboard_rounded,
+                      label:       'Dashboard',
+                      route:       AppRoutes.dashboard,
+                      activeRoute: widget.activeRoute,
+                    ),
+                    _NavItem(
+                      icon:        Icons.receipt_long_rounded,
+                      label:       'Invoices',
+                      route:       AppRoutes.invoices,
+                      activeRoute: widget.activeRoute,
+                    ),
+                    _NavItem(
+                      icon:        Icons.account_balance_wallet_rounded,
+                      label:       'Expenses & Income',
+                      route:       AppRoutes.expenses,
+                      activeRoute: widget.activeRoute,
+                    ),
+                    _NavItem(
+                      icon:        Icons.people_rounded,
+                      label:       'Clients',
+                      route:       AppRoutes.clients,
+                      activeRoute: widget.activeRoute,
+                    ),
+                    _NavItem(
+                      icon:        Icons.person_rounded,
+                      label:       'My Profile',
+                      route:       AppRoutes.profile,
+                      activeRoute: widget.activeRoute,
+                    ),
+
+                    // ── Section label: More ──────────────────────
+                    _DrawerSectionLabel(label: 'MORE'),
+
+                    _NavItem(
+                      icon:        Icons.description_rounded,
+                      label:       'Terms & Conditions',
+                      route:       AppRoutes.termsConditions,
+                      activeRoute: widget.activeRoute,
+                    ),
+                    _NavItem(
+                      icon:        Icons.settings_rounded,
+                      label:       'Settings',
+                      route:       AppRoutes.settings,
+                      activeRoute: widget.activeRoute,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Sign Out ─────────────────────────────────
+            GestureDetector(
+              onTap: _logout,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: BillifyColors.unpaid.withOpacity(0.06),
+                  border: Border(
+                    top: BorderSide(color: BillifyColors.unpaid.withOpacity(0.15)),
                   ),
                 ),
-              ],
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      color: BillifyColors.unpaid.withOpacity(0.1),
+                      child: const Icon(Icons.logout_rounded,
+                          color: BillifyColors.unpaid, size: 14),
+                    ),
+                    const SizedBox(width: 10),
+                    Text('SIGN OUT',
+                        style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.2,
+                            color: BillifyColors.unpaid)),
+                  ],
+                ),
+              ),
             ),
-          ),
+
+            // ── Version footer ───────────────────────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: BillifyColors.sidebarBg,
+              child: Text(
+                'BILLIFY  V1.0.0  //  CORE PROTOCOL',
+                style: GoogleFonts.poppins(
+                    fontSize: 7,
+                    letterSpacing: 1.5,
+                    color: BillifyColors.textSecondary.withOpacity(0.5),
+                    fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1435,206 +1619,95 @@ class _DrawerHeader extends StatelessWidget {
       onTap: onProfileTap,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(20, 52, 20, 22),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              BillifyColors.primaryDark,
-              BillifyColors.primary,
-              BillifyColors.primaryLight,
-            ],
-            begin: Alignment.topLeft,
-            end:   Alignment.bottomRight,
-          ),
-        ),
-        child: Stack(
+        padding: const EdgeInsets.fromLTRB(16, 48, 16, 16),
+        color: BillifyColors.primary,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Decorative circles
-            Positioned(
-              top: -24, right: -20,
-              child: Container(
-                width: 110, height: 110,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.05),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: -10, right: 40,
-              child: Container(
-                width: 60, height: 60,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.04),
-                ),
-              ),
-            ),
-
-            // Content
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            // Avatar row — square container
+            Row(
               children: [
-                // Avatar row
-                Row(
-                  children: [
-                    Stack(
-                      children: [
-                        Container(
-                          width: 62, height: 62,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                                color: Colors.white.withOpacity(0.6), width: 2),
-                            boxShadow: [
-                              BoxShadow(
-                                color:      Colors.black.withOpacity(0.25),
-                                blurRadius: 12,
-                                offset:     const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ClipOval(
-                            child: logoBase64 != null
-                                ? Image.memory(
-                              base64Decode(logoBase64!),
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  _HeaderInitials(initials),
-                            )
-                                : Container(
-                              color: Colors.white.withOpacity(0.15),
-                              child: _HeaderInitials(initials),
-                            ),
-                          ),
-                        ),
-                        // Badge
-                        if (missingCount > 0)
-                          Positioned(
-                            top: 0, right: 0,
-                            child: Container(
-                              width: 18, height: 18,
-                              decoration: BoxDecoration(
-                                color:  BillifyColors.overdue,
-                                shape:  BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 1.5),
-                              ),
-                              child: Center(
-                                child: Text('$missingCount',
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w800)),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-
-                    const SizedBox(width: 14),
-
-                    // App brand pill
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(20),
-                              border:       Border.all(
-                                  color: Colors.white.withOpacity(0.25)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.receipt_long_rounded,
-                                    color: Colors.white70, size: 11),
-                                const SizedBox(width: 5),
-                                Text('Billify',
-                                    style: GoogleFonts.poppins(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                        letterSpacing: 0.5)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                Container(
+                  width: 52, height: 52,
+                  color: const Color(0xFFF7F7FF).withOpacity(0.15),
+                  child: logoBase64 != null
+                      ? Image.memory(base64Decode(logoBase64!),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _HeaderInitials(initials))
+                      : _HeaderInitials(initials),
                 ),
-
-                const SizedBox(height: 14),
-
-                // Display name
-                Text(
-                  displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 0.2),
+                if (missingCount > 0)
+                  Container(
+                    margin: const EdgeInsets.only(left: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    color: BillifyColors.overdue,
+                    child: Text('$missingCount',
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 10,
+                            fontWeight: FontWeight.w800)),
+                  ),
+                const Spacer(),
+                // Billify brand chip
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  color: const Color(0xFFF7F7FF).withOpacity(0.15),
+                  child: Text('BILLIFY',
+                      style: GoogleFonts.poppins(
+                          fontSize: 8, fontWeight: FontWeight.w900,
+                          letterSpacing: 2.0,
+                          color: const Color(0xFFF7F7FF).withOpacity(0.8))),
                 ),
+              ],
+            ),
 
-                if (businessName.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    businessName,
+            const SizedBox(height: 10),
+
+            // Display name
+            Text(
+              displayName.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                  fontSize: 14, fontWeight: FontWeight.w900,
+                  color: const Color(0xFFF7F7FF),
+                  letterSpacing: 0.5),
+            ),
+
+            if (businessName.isNotEmpty) ...[
+              const SizedBox(height: 1),
+              Text(
+                businessName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.nunito(
+                    fontSize: 11, color: const Color(0xFFF7F7FF).withOpacity(0.65)),
+              ),
+            ],
+
+            const SizedBox(height: 4),
+
+            // Email row
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    email,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.nunito(
-                        fontSize: 12.5, color: Colors.white70),
+                        fontSize: 10, color: const Color(0xFFF7F7FF).withOpacity(0.5)),
                   ),
-                ],
-
-                const SizedBox(height: 6),
-
-                // Email row
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        email,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.nunito(
-                            fontSize: 11.5, color: Colors.white54),
-                      ),
-                    ),
-                    if (emailVerified) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color:        Colors.greenAccent.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                              color: Colors.greenAccent.withOpacity(0.4)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.verified_rounded,
-                                size: 10, color: Colors.greenAccent),
-                            const SizedBox(width: 3),
-                            Text('Verified',
-                                style: GoogleFonts.nunito(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.greenAccent)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
                 ),
+                if (emailVerified)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    color: BillifyColors.paid.withOpacity(0.3),
+                    child: Text('VERIFIED',
+                        style: GoogleFonts.poppins(
+                            fontSize: 7, fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                            color: Colors.greenAccent)),
+                  ),
               ],
             ),
           ],
@@ -1651,9 +1724,8 @@ class _HeaderInitials extends StatelessWidget {
   Widget build(BuildContext context) => Center(
     child: Text(initials,
         style: GoogleFonts.poppins(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: Colors.white)),
+            fontSize: 22, fontWeight: FontWeight.w900,
+            color: const Color(0xFFF7F7FF))),
   );
 }
 
@@ -1664,19 +1736,18 @@ class _DrawerSectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
     child: Text(
       label,
       style: GoogleFonts.poppins(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.8,
-          color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.55)),
+          fontSize: 9, fontWeight: FontWeight.w800,
+          letterSpacing: 2.0,
+          color: BillifyColors.textSecondary.withOpacity(0.6)),
     ),
   );
 }
 
-// ── Nav Item ──────────────────────────────────────────────
+// ── Nav Item — Architectural left-border active style ─────
 class _NavItem extends StatelessWidget {
   final IconData icon;
   final String   label;
@@ -1694,81 +1765,55 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isActive = activeRoute == route;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () {
-            Navigator.of(context).pop();
-            if (isActive) return;
-            if (route == AppRoutes.dashboard) {
-              Get.offAllNamed(AppRoutes.dashboard);
-            } else {
-              Get.offAllNamed(AppRoutes.dashboard);
-              Get.toNamed(route);
-            }
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: isActive
-                  ? LinearGradient(
-                colors: [
-                  BillifyColors.primary,
-                  BillifyColors.primaryLight,
-                ],
-                begin: Alignment.centerLeft,
-                end:   Alignment.centerRight,
-              )
-                  : null,
-              color: isActive ? null : Colors.transparent,
-            ),
-            child: Row(
-              children: [
-                // Icon container
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? Colors.white.withOpacity(0.2)
-                        : BillifyColors.primary.withOpacity(0.07),
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 17,
-                    color: isActive
-                        ? Colors.white
-                        : BillifyColors.primary.withOpacity(0.7),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      decoration: BoxDecoration(
+        color: isActive ? BillifyColors.primary.withOpacity(0.08) : Colors.transparent,
+        border: Border(
+          left: BorderSide(
+            color: isActive ? BillifyColors.primary : Colors.transparent,
+            width: 3,
+          ),
+        ),
+      ),
+      child: InkWell(
+        onTap: () {
+          // Desktop: use DesktopNavCallback — never call Navigator.pop()
+          // because the drawer is a plain widget, not a Flutter Drawer overlay.
+          final cb = DesktopNavCallback.maybeOf(context);
+          if (cb != null) { cb.navigate(route); return; }
+          // Mobile: existing behaviour unchanged.
+          Navigator.of(context).pop();
+          if (isActive) return;
+          if (route == AppRoutes.dashboard) {
+            Get.offAllNamed(AppRoutes.dashboard);
+          } else {
+            Get.offAllNamed(AppRoutes.dashboard);
+            Get.toNamed(route);
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: isActive ? BillifyColors.primary : BillifyColors.textSecondary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+                    letterSpacing: 0.8,
+                    color: isActive ? BillifyColors.primary : BillifyColors.textSecondary,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: GoogleFonts.poppins(
-                      fontSize: 13.5,
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                      color: isActive
-                          ? Colors.white
-                          : BillifyColors.textPrimary,
-                    ),
-                  ),
-                ),
-                if (isActive)
-                  Container(
-                    width: 6, height: 6,
-                    decoration: const BoxDecoration(
-                        color: Colors.white, shape: BoxShape.circle),
-                  ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1805,6 +1850,14 @@ class _LoginScreenState extends State<LoginScreen> {
         email:    _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
       );
+      // Show device picker on web (first login only)
+      if (kIsWeb) {
+        final svc = WebLayoutService.to;
+        if (!svc.hasChosen) {
+          final choice = await showWebDevicePickerDialog(context);
+          await svc.setMode(choice);
+        }
+      }
       // Check terms
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
@@ -1837,104 +1890,168 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Logo
-              Center(
-                child: Container(
-                  width: 72, height: 72,
-                  decoration: BoxDecoration(
-                    color: BillifyColors.primary,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 40),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Center(
-                child: Text('Billify',
-                    style: GoogleFonts.poppins(fontSize: 28, fontWeight: FontWeight.w800,
-                        color: BillifyColors.primary)),
-              ),
-              Center(
-                child: Text('Sign in to your account',
-                    style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ),
-              const SizedBox(height: 40),
-
-              // Email
-              TextField(
-                controller: _emailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email Address',
-                  prefixIcon: Icon(Icons.email_rounded, color: BillifyColors.primary),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Password
-              TextField(
-                controller: _passwordCtrl,
-                obscureText: _obscure,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_rounded, color: BillifyColors.primary),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    onPressed: () => setState(() => _obscure = !_obscure),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              // Forgot password
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: _forgotPassword,
-                  child: Text('Forgot Password?',
-                      style: GoogleFonts.nunito(color: BillifyColors.primary, fontWeight: FontWeight.w600)),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Login button
-              _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : ElevatedButton(
-                onPressed: _login,
-                child: const Text('Login'),
-              ),
-              const SizedBox(height: 16),
-
-              // Register link
-              Center(
-                child: GestureDetector(
-                  onTap: () => Get.toNamed(AppRoutes.register),
-                  child: RichText(
-                    text: TextSpan(
-                      text: "Don't have an account? ",
-                      style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                      children: [
-                        TextSpan(
-                          text: 'Register',
-                          style: GoogleFonts.nunito(
-                              color: BillifyColors.primary, fontWeight: FontWeight.w700),
-                        ),
-                      ],
+      backgroundColor: BillifyColors.background,
+      body: Stack(
+        children: [
+          // Top primary bar
+          Positioned(top: 0, left: 0, right: 0, child: Container(height: 3, color: BillifyColors.primary)),
+          // Bottom bar
+          Positioned(bottom: 0, left: 0, right: 0, child: Container(height: 1, color: BillifyColors.surfaceHigh)),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context),
+                    const SizedBox(height: 32),
+                    _buildEmailField(),
+                    const SizedBox(height: 12),
+                    _buildPasswordField(context),
+                    const SizedBox(height: 4),
+                    _buildForgotPasswordLink(),
+                    const SizedBox(height: 20),
+                    _loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : ElevatedButton(
+                      onPressed: _login,
+                      child: const Text('AUTHENTICATE'),
                     ),
-                  ),
+                    const SizedBox(height: 24),
+                    _buildRegisterLink(context),
+                    const SizedBox(height: 32),
+                    // Footer
+                    Center(
+                      child: Text(
+                        'SYSTEM VER. 1.0.0  //  SECURE PROTOCOL ENABLED',
+                        style: GoogleFonts.poppins(
+                          fontSize: 7, letterSpacing: 1.5,
+                          color: BillifyColors.textSecondary.withOpacity(0.5),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Logo — sharp rectangle
+        Container(
+          width: 64, height: 64,
+          color: BillifyColors.primary,
+          child: const Icon(Icons.receipt_long_rounded, color: Color(0xFFF7F7FF), size: 34),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'BILLIFY',
+          style: GoogleFonts.poppins(
+            fontSize: 24, fontWeight: FontWeight.w900,
+            color: BillifyColors.primary, letterSpacing: 4.0,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'ENTERPRISE MANAGEMENT SYSTEM',
+          style: GoogleFonts.poppins(
+            fontSize: 8, letterSpacing: 2.0,
+            color: BillifyColors.textSecondary, fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 20),
+        // Horizontal rule accent
+        Row(children: [
+          Expanded(child: Container(height: 1, color: BillifyColors.outlineVariant.withOpacity(0.4))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text('SIGN IN', style: GoogleFonts.poppins(
+                fontSize: 9, fontWeight: FontWeight.w800,
+                letterSpacing: 2.0, color: BillifyColors.textSecondary)),
+          ),
+          Expanded(child: Container(height: 1, color: BillifyColors.outlineVariant.withOpacity(0.4))),
+        ]),
+      ],
+    );
+  }
+
+  Widget _buildEmailField() {
+    return TextField(
+      controller: _emailCtrl,
+      keyboardType: TextInputType.emailAddress,
+      decoration: const InputDecoration(
+        labelText: 'PROFESSIONAL EMAIL',
+        prefixIcon: Icon(Icons.email_rounded, color: BillifyColors.primary, size: 18),
+      ),
+    );
+  }
+
+  Widget _buildPasswordField(BuildContext context) {
+    return TextField(
+      controller: _passwordCtrl,
+      obscureText: _obscure,
+      decoration: InputDecoration(
+        labelText: 'ACCESS KEY',
+        prefixIcon: const Icon(Icons.lock_rounded, color: BillifyColors.primary, size: 18),
+        suffixIcon: IconButton(
+          icon: Icon(
+            _obscure ? Icons.visibility_off : Icons.visibility,
+            color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18,
+          ),
+          onPressed: () => setState(() => _obscure = !_obscure),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildForgotPasswordLink() {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: TextButton(
+        onPressed: _forgotPassword,
+        style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+        child: Text(
+          'RESET TERMINAL',
+          style: GoogleFonts.poppins(
+            color: BillifyColors.primary, fontWeight: FontWeight.w700,
+            fontSize: 9, letterSpacing: 1.2,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRegisterLink(BuildContext context) {
+    return Center(
+      child: GestureDetector(
+        onTap: () => Get.toNamed(AppRoutes.register),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'NO ACCOUNT?  ',
+              style: GoogleFonts.poppins(
+                fontSize: 9, letterSpacing: 1.2,
+                color: BillifyColors.textSecondary, fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              'REQUEST ACCESS',
+              style: GoogleFonts.poppins(
+                fontSize: 9, letterSpacing: 1.2,
+                color: BillifyColors.primary, fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -2022,62 +2139,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         child: Column(
           children: [
             const SizedBox(height: 8),
-            Text('Join Billify',
-                style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w700,
-                    color: BillifyColors.primary)),
-            Text('Create your free account',
-                style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            _buildRegisterHeader(context),
             const SizedBox(height: 32),
-
-            TextField(
-              controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Full Name',
-                prefixIcon: Icon(Icons.person_rounded, color: BillifyColors.primary),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _businessCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Business Name',
-                prefixIcon: Icon(Icons.business_rounded, color: BillifyColors.primary),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email Address',
-                prefixIcon: Icon(Icons.email_rounded, color: BillifyColors.primary),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passwordCtrl,
-              obscureText: _obscure,
-              decoration: InputDecoration(
-                labelText: 'Password',
-                prefixIcon: const Icon(Icons.lock_rounded, color: BillifyColors.primary),
-                suffixIcon: IconButton(
-                  icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _confirmPassCtrl,
-              obscureText: _obscure,
-              decoration: const InputDecoration(
-                labelText: 'Confirm Password',
-                prefixIcon: Icon(Icons.lock_outline_rounded, color: BillifyColors.primary),
-              ),
-            ),
+            _buildRegisterFields(context),
             const SizedBox(height: 32),
-
             _loading
                 ? const CircularProgressIndicator()
                 : ElevatedButton(
@@ -2085,21 +2150,110 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: const Text('Create Account'),
             ),
             const SizedBox(height: 16),
+            _buildLoginLink(context),
+          ],
+        ),
+      ),
+    );
+  }
 
-            GestureDetector(
-              onTap: () => Get.back(),
-              child: RichText(
-                text: TextSpan(
-                  text: 'Already have an account? ',
-                  style: GoogleFonts.nunito(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  children: [
-                    TextSpan(
-                      text: 'Login',
-                      style: GoogleFonts.nunito(
-                          color: BillifyColors.primary, fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
+  Widget _buildRegisterHeader(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          'Join Billify',
+          style: GoogleFonts.poppins(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: BillifyColors.primary,
+          ),
+        ),
+        Text(
+          'Create your free account',
+          style: GoogleFonts.nunito(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRegisterFields(BuildContext context) {
+    return Column(
+      children: [
+        TextField(
+          controller: _nameCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Full Name',
+            prefixIcon:
+            Icon(Icons.person_rounded, color: BillifyColors.primary),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _businessCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Business Name',
+            prefixIcon:
+            Icon(Icons.business_rounded, color: BillifyColors.primary),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _emailCtrl,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'Email Address',
+            prefixIcon:
+            Icon(Icons.email_rounded, color: BillifyColors.primary),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _passwordCtrl,
+          obscureText: _obscure,
+          decoration: InputDecoration(
+            labelText: 'Password',
+            prefixIcon:
+            const Icon(Icons.lock_rounded, color: BillifyColors.primary),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscure ? Icons.visibility_off : Icons.visibility,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              onPressed: () => setState(() => _obscure = !_obscure),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _confirmPassCtrl,
+          obscureText: _obscure,
+          decoration: const InputDecoration(
+            labelText: 'Confirm Password',
+            prefixIcon: Icon(Icons.lock_outline_rounded,
+                color: BillifyColors.primary),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoginLink(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Get.back(),
+      child: RichText(
+        text: TextSpan(
+          text: 'Already have an account? ',
+          style: GoogleFonts.nunito(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          children: [
+            TextSpan(
+              text: 'Login',
+              style: GoogleFonts.nunito(
+                color: BillifyColors.primary,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -2162,6 +2316,14 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
         'termsAccepted':   true,
         'termsAcceptedAt': FieldValue.serverTimestamp(),
       });
+      // Show device picker on web (first login only — terms appear only once)
+      if (kIsWeb) {
+        final svc = WebLayoutService.to;
+        if (!svc.hasChosen) {
+          final choice = await showWebDevicePickerDialog(context);
+          await svc.setMode(choice);
+        }
+      }
       Get.offAllNamed(AppRoutes.dashboard);
     } catch (e) {
       Get.snackbar('Error', 'Could not save acceptance. Please try again.',
@@ -2261,7 +2423,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: BillifyColors.primary.withOpacity(0.06),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.zero,
                       border: Border.all(color: BillifyColors.primary.withOpacity(0.2)),
                     ),
                     child: Text(
@@ -2669,7 +2831,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.zero,
         boxShadow: [
           BoxShadow(color: BillifyColors.primary.withOpacity(0.06),
               blurRadius: 12, offset: const Offset(0, 4)),
@@ -2817,7 +2979,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
             ],
           ),
-          drawer: BillifyDrawer(activeRoute: AppRoutes.profile),
 
           body: Column(
             children: [
@@ -3111,7 +3272,7 @@ class _IncompleteBanner extends StatelessWidget {
                         horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: BillifyColors.primary.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.zero,
                     ),
                     child: Text(f,
                         style: GoogleFonts.nunito(
@@ -3164,7 +3325,7 @@ class _AvatarCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end:   Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.zero,
         boxShadow: [
           BoxShadow(color: BillifyColors.primary.withOpacity(0.35),
               blurRadius: 16, offset: const Offset(0, 8)),
@@ -3258,7 +3419,7 @@ class _AvatarCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
                 color: BillifyColors.paid,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.zero,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -3306,7 +3467,7 @@ class _AvatarChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color:        primary ? Colors.white : Colors.white24,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.zero,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -3400,7 +3561,7 @@ class _LockScreenState extends State<LockScreen>
                   width: 80, height: 80,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(22),
+                    borderRadius: BorderRadius.zero,
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.2),
@@ -3474,6 +3635,7 @@ class _LockScreenState extends State<LockScreen>
 // ════════════════════════════════════════════════════════════
 class SettingsController extends GetxController {
   // Observable settings
+  final themeMode        = 'light'.obs;
   final currencySymbol   = '₹'.obs;
   final dateFormat       = 'd MMM yyyy'.obs;
   final invoicePrefix    = 'INV'.obs;
@@ -3500,6 +3662,7 @@ class SettingsController extends GetxController {
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
+    themeMode.value        = p.getString(_PrefKeys.themeMode)        ?? 'light';
     currencySymbol.value   = p.getString(_PrefKeys.currencySymbol)   ?? '₹';
     dateFormat.value       = p.getString(_PrefKeys.dateFormat)       ?? 'd MMM yyyy';
     invoicePrefix.value    = p.getString(_PrefKeys.invoicePrefix)    ?? 'INV';
@@ -3509,12 +3672,29 @@ class SettingsController extends GetxController {
     autoLockMins.value     = p.getInt(_PrefKeys.autoLockMins)        ?? 0;
     showAmountOnList.value = p.getBool(_PrefKeys.showAmountOnList)   ?? true;
     compactCards.value     = p.getBool(_PrefKeys.compactCards)       ?? false;
+    _applyTheme();
 
     // Treat cold launch like coming from background so the lock
     // triggers on the first SplashScreen → Dashboard transition.
     if (biometricLock.value || autoLockMins.value > 0) {
       _backgroundedAt = DateTime.now();
     }
+  }
+
+  // ── Theme ──────────────────────────────────────────────────
+  void _applyTheme() {
+    switch (themeMode.value) {
+      case 'light':  Get.changeThemeMode(ThemeMode.light);  break;
+      case 'dark':   Get.changeThemeMode(ThemeMode.dark);   break;
+      default:       Get.changeThemeMode(ThemeMode.light); break;
+    }
+  }
+
+  Future<void> setThemeMode(String val) async {
+    themeMode.value = val;
+    _applyTheme();
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_PrefKeys.themeMode, val);
   }
 
   // ── Persist helpers ────────────────────────────────────────
@@ -3743,7 +3923,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Container(width: 3, height: 16,
             decoration: BoxDecoration(
                 color: BillifyColors.primary,
-                borderRadius: BorderRadius.circular(2))),
+                borderRadius: BorderRadius.zero)),
         const SizedBox(width: 8),
         Text(title,
             style: GoogleFonts.poppins(
@@ -3758,7 +3938,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     margin: const EdgeInsets.only(bottom: 4),
     decoration: BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.zero,
       boxShadow: [
         BoxShadow(color: BillifyColors.primary.withOpacity(0.06),
             blurRadius: 10, offset: const Offset(0, 3)),
@@ -3784,7 +3964,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: iconColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.zero,
             ),
             child: Icon(icon, color: iconColor, size: 18),
           ),
@@ -3920,6 +4100,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  String _themeModeLabel(String v) {
+    switch (v) {
+      case 'light': return 'Light';
+      case 'dark':  return 'Dark';
+      default:      return 'light';
+    }
+  }
+
   String _lockLabel(int v) {
     switch (v) {
       case 1:  return '1 minute';
@@ -3935,383 +4123,423 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: const Text('Settings')),
-      drawer: const BillifyDrawer(activeRoute: AppRoutes.settings),
-      body: Obx(() => ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-        children: [
-
-          // ── APPEARANCE ─────────────────────────────────────
-          _section('APPEARANCE'),
-          _card(children: [
-            _switchTile(
-              icon: Icons.view_agenda_rounded,
-              iconColor: const Color(0xFF00BCD4),
-              title: 'Compact Cards',
-              subtitle: _ctrl.compactCards.value
-                  ? 'Active — reduced card padding'
-                  : 'Standard card size',
-              value: _ctrl.compactCards.value,
-              onChanged: (v) async {
-                await _ctrl._setBool(_PrefKeys.compactCards, _ctrl.compactCards, v);
-                Get.snackbar(
-                  v ? 'Compact Cards On' : 'Compact Cards Off',
-                  'Invoice & expense cards updated.',
-                  backgroundColor: const Color(0xFF00BCD4),
-                  colorText: Colors.white,
-                  duration: const Duration(seconds: 2),
-                  snackPosition: SnackPosition.TOP,
-                );
-              },
-            ),
-            _switchTile(
-              icon: Icons.attach_money_rounded,
-              iconColor: BillifyColors.paid,
-              title: 'Show Amounts in List',
-              subtitle: _ctrl.showAmountOnList.value
-                  ? 'Amounts visible on list cards'
-                  : 'Amounts hidden on list cards',
-              value: _ctrl.showAmountOnList.value,
-              onChanged: (v) async {
-                await _ctrl._setBool(
-                    _PrefKeys.showAmountOnList, _ctrl.showAmountOnList, v);
-                Get.snackbar(
-                  v ? 'Amounts Shown' : 'Amounts Hidden',
-                  'Invoice list cards updated.',
-                  backgroundColor: BillifyColors.paid,
-                  colorText: Colors.white,
-                  duration: const Duration(seconds: 2),
-                  snackPosition: SnackPosition.TOP,
-                );
-              },
-              isLast: true,
-            ),
-          ]),
-
-          // ── INVOICE DEFAULTS ───────────────────────────────
-          _section('INVOICE DEFAULTS'),
-          _card(children: [
-            _tile(
-              icon: Icons.tag_rounded,
-              iconColor: BillifyColors.primary,
-              title: 'Invoice Number Prefix',
-              subtitle: _ctrl.invoicePrefix.value,
-              onTap: () => _showInputDialog(
-                title: 'Invoice Prefix',
-                hint: 'e.g. INV, BILL, TAX',
-                current: _ctrl.invoicePrefix.value,
-                onSave: (v) => _ctrl._setString(
-                    _PrefKeys.invoicePrefix, _ctrl.invoicePrefix, v.toUpperCase()),
-              ),
-            ),
-            _tile(
-              icon: Icons.confirmation_number_rounded,
-              iconColor: BillifyColors.primaryLight,
-              title: 'Order ID Prefix',
-              subtitle: _ctrl.orderPrefix.value,
-              onTap: () => _showInputDialog(
-                title: 'Order ID Prefix',
-                hint: 'e.g. ORD, JOB, PO',
-                current: _ctrl.orderPrefix.value,
-                onSave: (v) => _ctrl._setString(
-                    _PrefKeys.orderPrefix, _ctrl.orderPrefix, v.toUpperCase()),
-              ),
-            ),
-            _tile(
-              icon: Icons.currency_rupee_rounded,
-              iconColor: const Color(0xFFFF6F00),
-              title: 'Currency Symbol',
-              subtitle: _ctrl.currencySymbol.value,
-              onTap: () => _showOptions<String>(
-                title: 'Currency Symbol',
-                options: ['₹', '\$', '€', '£', '¥'],
-                current: _ctrl.currencySymbol.value,
-                label: (v) {
-                  const names = {
-                    '₹': '₹  Indian Rupee',
-                    '\$': '\$  US Dollar',
-                    '€': '€  Euro',
-                    '£': '£  British Pound',
-                    '¥': '¥  Japanese Yen',
-                  };
-                  return names[v] ?? v;
-                },
-                onSelect: (v) => _ctrl._setString(
-                    _PrefKeys.currencySymbol, _ctrl.currencySymbol, v),
-              ),
-            ),
-            _tile(
-              icon: Icons.calendar_today_rounded,
-              iconColor: const Color(0xFF00897B),
-              title: 'Date Format',
-              subtitle: _ctrl.dateFormat.value,
-              onTap: () => _showOptions<String>(
-                title: 'Date Format',
-                options: ['d MMM yyyy', 'dd/MM/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd'],
-                current: _ctrl.dateFormat.value,
-                label: (v) => v,
-                onSelect: (v) => _ctrl._setString(
-                    _PrefKeys.dateFormat, _ctrl.dateFormat, v),
-              ),
-            ),
-            _tile(
-              icon: Icons.percent_rounded,
-              iconColor: const Color(0xFFE53935),
-              title: 'Default GST Rate',
-              subtitle: '${_ctrl.defaultGst.value}%',
-              isLast: true,
-              onTap: () => _showInputDialog(
-                title: 'Default GST %',
-                hint: 'e.g. 18',
-                current: _ctrl.defaultGst.value,
-                keyboard: const TextInputType.numberWithOptions(decimal: true),
-                onSave: (v) => _ctrl._setString(
-                    _PrefKeys.defaultGst, _ctrl.defaultGst, v),
-              ),
-            ),
-          ]),
-
-          // ── SECURITY ───────────────────────────────────────
-          _section('SECURITY'),
-          _card(children: [
-            _switchTile(
-              icon: Icons.fingerprint_rounded,
-              iconColor: const Color(0xFF5C6BC0),
-              title: 'Biometric Lock',
-              subtitle: _ctrl.biometricLock.value
-                  ? 'Enabled — app locked on next resume'
-                  : 'Require fingerprint / face to open app',
-              value: _ctrl.biometricLock.value,
-              onChanged: (v) async {
-                await _ctrl._setBool(_PrefKeys.biometricLock, _ctrl.biometricLock, v);
-                if (v) {
-                  Get.snackbar(
-                    'Biometric Lock Enabled',
-                    'The app will prompt for biometric auth on next resume. '
-                        'Ensure biometrics are enrolled in your device settings.',
-                    backgroundColor: const Color(0xFF5C6BC0),
-                    colorText: Colors.white,
-                    duration: const Duration(seconds: 4),
-                    snackPosition: SnackPosition.TOP,
-                    icon: Icon(Icons.fingerprint_rounded,
-                        color: Colors.white),
-                  );
-                }
-              },
-            ),
-            _tile(
-              icon: Icons.lock_clock_rounded,
-              iconColor: const Color(0xFF8D6E63),
-              title: 'Auto-Lock',
-              subtitle: _ctrl.autoLockMins.value == 0
-                  ? 'Disabled'
-                  : 'Lock after ${_lockLabel(_ctrl.autoLockMins.value)} of inactivity',
-              isLast: true,
-              onTap: () => _showOptions<int>(
-                title: 'Auto-Lock After',
-                options: [0, 1, 5, 15],
-                current: _ctrl.autoLockMins.value,
-                label: _lockLabel,
-                onSelect: (v) async {
-                  await _ctrl._setInt(_PrefKeys.autoLockMins, _ctrl.autoLockMins, v);
-                  if (v > 0) {
-                    Get.snackbar(
-                      'Auto-Lock Set',
-                      'App will lock after ${_lockLabel(v)} of inactivity.',
-                      backgroundColor: const Color(0xFF8D6E63),
-                      colorText: Colors.white,
-                      snackPosition: SnackPosition.TOP,
-                    );
-                  }
-                },
-              ),
-            ),
-          ]),
-
-          // ── ACCOUNT ────────────────────────────────────────
-          _section('ACCOUNT'),
-          _card(children: [
-            _tile(
-              icon: Icons.person_rounded,
-              iconColor: BillifyColors.primary,
-              title: 'Edit Profile',
-              subtitle: 'Name, business, tax & bank details',
-              onTap: () {
-                Get.back();
-                Get.toNamed(AppRoutes.profile);
-              },
-            ),
-            _tile(
-              icon: Icons.lock_reset_rounded,
-              iconColor: const Color(0xFFFB8C00),
-              title: 'Change Password',
-              subtitle: 'Send a reset link to your email',
-              onTap: () async {
-                final user = FirebaseAuth.instance.currentUser;
-                if (user?.email == null) return;
-                try {
-                  await FirebaseAuth.instance
-                      .sendPasswordResetEmail(email: user!.email!);
-                  Get.snackbar('Email Sent',
-                      'Password reset link sent to ${user.email}',
-                      backgroundColor: BillifyColors.paid,
-                      colorText: Colors.white,
-                      snackPosition: SnackPosition.TOP);
-                } catch (e) {
-                  Get.snackbar('Error', 'Could not send reset email',
-                      backgroundColor: BillifyColors.unpaid,
-                      colorText: Colors.white);
-                }
-              },
-            ),
-            _tile(
-              icon: Icons.verified_user_rounded,
-              iconColor: BillifyColors.paid,
-              title: 'Email Verification',
-              subtitle: FirebaseAuth.instance.currentUser?.emailVerified == true
-                  ? 'Your email is verified ✓'
-                  : 'Tap to send verification email',
-              isLast: true,
-              onTap: FirebaseAuth.instance.currentUser?.emailVerified == true
-                  ? null
-                  : () async {
-                try {
-                  await FirebaseAuth.instance.currentUser
-                      ?.sendEmailVerification();
-                  Get.snackbar('Verification Sent',
-                      'Check your inbox for the verification link',
-                      backgroundColor: BillifyColors.paid,
-                      colorText: Colors.white,
-                      snackPosition: SnackPosition.TOP);
-                } catch (_) {
-                  Get.snackbar('Error', 'Could not send verification email',
-                      backgroundColor: BillifyColors.unpaid,
-                      colorText: Colors.white);
-                }
-              },
-            ),
-          ]),
-
-          // ── DATA & STORAGE ─────────────────────────────────
-          _section('DATA & STORAGE'),
-          _card(children: [
-            _tile(
-              icon: Icons.cleaning_services_rounded,
-              iconColor: const Color(0xFF00ACC1),
-              title: 'Clear Local Cache',
-              subtitle: 'Remove cached profile & settings data',
-              onTap: _clearAllData,
-            ),
-            StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseAuth.instance.currentUser != null
-                  ? FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(FirebaseAuth.instance.currentUser!.uid)
-                  .snapshots()
-                  : const Stream.empty(),
-              builder: (context, snap) {
-                final isConnected = snap.connectionState == ConnectionState.active
-                    && !snap.hasError;
-                final isFromCache = snap.data?.metadata.isFromCache ?? false;
-                final statusLabel = snap.connectionState == ConnectionState.waiting
-                    ? 'Connecting…'
-                    : snap.hasError
-                    ? 'Offline'
-                    : isFromCache
-                    ? 'Cached'
-                    : 'Live';
-                final statusColor = snap.hasError || isFromCache
-                    ? BillifyColors.overdue
-                    : isConnected
-                    ? BillifyColors.paid
-                    : BillifyColors.textSecondary;
-                return _tile(
-                  icon: snap.hasError
-                      ? Icons.cloud_off_rounded
-                      : Icons.cloud_done_rounded,
-                  iconColor: statusColor,
-                  title: 'Cloud Sync',
-                  subtitle: isConnected && !isFromCache
-                      ? 'All data syncing in real-time'
-                      : snap.hasError
-                      ? 'Check your internet connection'
-                      : 'Last synced data shown',
-                  isLast: true,
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(statusLabel,
-                        style: GoogleFonts.nunito(
-                            fontSize: 12, fontWeight: FontWeight.w700,
-                            color: statusColor)),
-                  ),
-                );
-              },
-            ),
-          ]),
-
-          // ── ABOUT ──────────────────────────────────────────
-          _section('ABOUT'),
-          _card(children: [
-            _tile(
-              icon: Icons.info_outline_rounded,
-              iconColor: BillifyColors.primary,
-              title: 'App Version',
-              subtitle: 'Billify v1.0.0',
-              isLast: false,
-              trailing: const SizedBox.shrink(),
-            ),
-            _tile(
-              icon: Icons.description_rounded,
-              iconColor: BillifyColors.textSecondary,
-              title: 'Terms & Conditions',
-              onTap: () => Get.toNamed(AppRoutes.termsConditions),
-            ),
-            _tile(
-              icon: Icons.privacy_tip_rounded,
-              iconColor: const Color(0xFF5C6BC0),
-              title: 'Privacy Policy',
-              subtitle: 'Your data is stored securely on Firebase',
-              isLast: true,
-              onTap: () => Get.snackbar(
-                'Privacy Policy',
-                'Billify stores your data securely using Google Firebase. We never sell or share your data.',
-                backgroundColor: BillifyColors.primary,
-                colorText: Colors.white,
-                duration: const Duration(seconds: 5),
-                snackPosition: SnackPosition.BOTTOM,
-              ),
-            ),
-          ]),
-
-          // ── DANGER ZONE ────────────────────────────────────
-          _section('DANGER ZONE'),
-          _card(children: [
-            _tile(
-              icon: Icons.delete_forever_rounded,
-              iconColor: BillifyColors.unpaid,
-              title: 'Delete Account',
-              subtitle: 'Permanently remove your account & all data',
-              isLast: true,
-              onTap: _deleteAccount,
-              trailing: const Icon(Icons.chevron_right_rounded,
-                  color: BillifyColors.unpaid, size: 18),
-            ),
-          ]),
-
-          const SizedBox(height: 20),
-
-          // Footer
-          Center(
-            child: Text('Billify · Smart Invoicing. Simple Finance.',
+      body: Obx(
+            () => ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+          children: [
+            _section('APPEARANCE'),
+            _buildAppearanceCard(),
+            _section('INVOICE DEFAULTS'),
+            _buildInvoiceDefaultsCard(),
+            _section('SECURITY'),
+            _buildSecurityCard(),
+            _section('ACCOUNT'),
+            _buildAccountCard(context),
+            _section('DATA & STORAGE'),
+            _buildDataStorageCard(),
+            _section('ABOUT'),
+            _buildAboutCard(),
+            _section('DANGER ZONE'),
+            _buildDangerZoneCard(),
+            const SizedBox(height: 20),
+            Center(
+              child: Text(
+                'Billify · Smart Invoicing. Simple Finance.',
                 style: GoogleFonts.nunito(
-                    fontSize: 11,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6))),
-          ),
-        ],
-      )),
+                  fontSize: 11,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant
+                      .withOpacity(0.6),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
+  }
+
+  Widget _buildAppearanceCard() {
+    return _card(children: [
+      _switchTile(
+        icon: Icons.view_agenda_rounded,
+        iconColor: const Color(0xFF00BCD4),
+        title: 'Compact Cards',
+        subtitle: _ctrl.compactCards.value
+            ? 'Active — reduced card padding'
+            : 'Standard card size',
+        value: _ctrl.compactCards.value,
+        onChanged: (v) async {
+          await _ctrl._setBool(
+              _PrefKeys.compactCards, _ctrl.compactCards, v);
+          Get.snackbar(
+            v ? 'Compact Cards On' : 'Compact Cards Off',
+            'Invoice & expense cards updated.',
+            backgroundColor: const Color(0xFF00BCD4),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+            snackPosition: SnackPosition.TOP,
+          );
+        },
+      ),
+      _switchTile(
+        icon: Icons.attach_money_rounded,
+        iconColor: BillifyColors.paid,
+        title: 'Show Amounts in List',
+        subtitle: _ctrl.showAmountOnList.value
+            ? 'Amounts visible on list cards'
+            : 'Amounts hidden on list cards',
+        value: _ctrl.showAmountOnList.value,
+        onChanged: (v) async {
+          await _ctrl._setBool(
+              _PrefKeys.showAmountOnList, _ctrl.showAmountOnList, v);
+          Get.snackbar(
+            v ? 'Amounts Shown' : 'Amounts Hidden',
+            'Invoice list cards updated.',
+            backgroundColor: BillifyColors.paid,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2),
+            snackPosition: SnackPosition.TOP,
+          );
+        },
+        isLast: true,
+      ),
+    ]);
+  }
+
+  Widget _buildInvoiceDefaultsCard() {
+    return _card(children: [
+      _tile(
+        icon: Icons.tag_rounded,
+        iconColor: BillifyColors.primary,
+        title: 'Invoice Number Prefix',
+        subtitle: _ctrl.invoicePrefix.value,
+        onTap: () => _showInputDialog(
+          title: 'Invoice Prefix',
+          hint: 'e.g. INV, BILL, TAX',
+          current: _ctrl.invoicePrefix.value,
+          onSave: (v) => _ctrl._setString(
+              _PrefKeys.invoicePrefix, _ctrl.invoicePrefix, v.toUpperCase()),
+        ),
+      ),
+      _tile(
+        icon: Icons.confirmation_number_rounded,
+        iconColor: BillifyColors.primaryLight,
+        title: 'Order ID Prefix',
+        subtitle: _ctrl.orderPrefix.value,
+        onTap: () => _showInputDialog(
+          title: 'Order ID Prefix',
+          hint: 'e.g. ORD, JOB, PO',
+          current: _ctrl.orderPrefix.value,
+          onSave: (v) => _ctrl._setString(
+              _PrefKeys.orderPrefix, _ctrl.orderPrefix, v.toUpperCase()),
+        ),
+      ),
+      _tile(
+        icon: Icons.currency_rupee_rounded,
+        iconColor: const Color(0xFFFF6F00),
+        title: 'Currency Symbol',
+        subtitle: _ctrl.currencySymbol.value,
+        onTap: () => _showOptions<String>(
+          title: 'Currency Symbol',
+          options: ['₹', '\$', '€', '£', '¥'],
+          current: _ctrl.currencySymbol.value,
+          label: (v) {
+            const names = {
+              '₹': '₹  Indian Rupee',
+              '\$': '\$  US Dollar',
+              '€': '€  Euro',
+              '£': '£  British Pound',
+              '¥': '¥  Japanese Yen',
+            };
+            return names[v] ?? v;
+          },
+          onSelect: (v) => _ctrl._setString(
+              _PrefKeys.currencySymbol, _ctrl.currencySymbol, v),
+        ),
+      ),
+      _tile(
+        icon: Icons.calendar_today_rounded,
+        iconColor: const Color(0xFF00897B),
+        title: 'Date Format',
+        subtitle: _ctrl.dateFormat.value,
+        onTap: () => _showOptions<String>(
+          title: 'Date Format',
+          options: ['d MMM yyyy', 'dd/MM/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd'],
+          current: _ctrl.dateFormat.value,
+          label: (v) => v,
+          onSelect: (v) =>
+              _ctrl._setString(_PrefKeys.dateFormat, _ctrl.dateFormat, v),
+        ),
+      ),
+      _tile(
+        icon: Icons.percent_rounded,
+        iconColor: const Color(0xFFE53935),
+        title: 'Default GST Rate',
+        subtitle: '${_ctrl.defaultGst.value}%',
+        isLast: true,
+        onTap: () => _showInputDialog(
+          title: 'Default GST %',
+          hint: 'e.g. 18',
+          current: _ctrl.defaultGst.value,
+          keyboard: const TextInputType.numberWithOptions(decimal: true),
+          onSave: (v) =>
+              _ctrl._setString(_PrefKeys.defaultGst, _ctrl.defaultGst, v),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _buildSecurityCard() {
+    return _card(children: [
+      _switchTile(
+        icon: Icons.fingerprint_rounded,
+        iconColor: const Color(0xFF5C6BC0),
+        title: 'Biometric Lock',
+        subtitle: _ctrl.biometricLock.value
+            ? 'Enabled — app locked on next resume'
+            : 'Require fingerprint / face to open app',
+        value: _ctrl.biometricLock.value,
+        onChanged: (v) async {
+          await _ctrl._setBool(
+              _PrefKeys.biometricLock, _ctrl.biometricLock, v);
+          if (v) {
+            Get.snackbar(
+              'Biometric Lock Enabled',
+              'The app will prompt for biometric auth on next resume. '
+                  'Ensure biometrics are enrolled in your device settings.',
+              backgroundColor: const Color(0xFF5C6BC0),
+              colorText: Colors.white,
+              duration: const Duration(seconds: 4),
+              snackPosition: SnackPosition.TOP,
+              icon: const Icon(Icons.fingerprint_rounded, color: Colors.white),
+            );
+          }
+        },
+      ),
+      _tile(
+        icon: Icons.lock_clock_rounded,
+        iconColor: const Color(0xFF8D6E63),
+        title: 'Auto-Lock',
+        subtitle: _ctrl.autoLockMins.value == 0
+            ? 'Disabled'
+            : 'Lock after ${_lockLabel(_ctrl.autoLockMins.value)} of inactivity',
+        isLast: true,
+        onTap: () => _showOptions<int>(
+          title: 'Auto-Lock After',
+          options: [0, 1, 5, 15],
+          current: _ctrl.autoLockMins.value,
+          label: _lockLabel,
+          onSelect: (v) async {
+            await _ctrl._setInt(
+                _PrefKeys.autoLockMins, _ctrl.autoLockMins, v);
+            if (v > 0) {
+              Get.snackbar(
+                'Auto-Lock Set',
+                'App will lock after ${_lockLabel(v)} of inactivity.',
+                backgroundColor: const Color(0xFF8D6E63),
+                colorText: Colors.white,
+                snackPosition: SnackPosition.TOP,
+              );
+            }
+          },
+        ),
+      ),
+    ]);
+  }
+
+  Widget _buildAccountCard(BuildContext context) {
+    return _card(children: [
+      _tile(
+        icon: Icons.person_rounded,
+        iconColor: BillifyColors.primary,
+        title: 'Edit Profile',
+        subtitle: 'Name, business, tax & bank details',
+        onTap: () {
+          Get.back();
+          Get.toNamed(AppRoutes.profile);
+        },
+      ),
+      _tile(
+        icon: Icons.lock_reset_rounded,
+        iconColor: const Color(0xFFFB8C00),
+        title: 'Change Password',
+        subtitle: 'Send a reset link to your email',
+        onTap: () async {
+          final user = FirebaseAuth.instance.currentUser;
+          if (user?.email == null) return;
+          try {
+            await FirebaseAuth.instance
+                .sendPasswordResetEmail(email: user!.email!);
+            Get.snackbar(
+              'Email Sent',
+              'Password reset link sent to ${user.email}',
+              backgroundColor: BillifyColors.paid,
+              colorText: Colors.white,
+              snackPosition: SnackPosition.TOP,
+            );
+          } catch (e) {
+            Get.snackbar(
+              'Error',
+              'Could not send reset email',
+              backgroundColor: BillifyColors.unpaid,
+              colorText: Colors.white,
+            );
+          }
+        },
+      ),
+      _tile(
+        icon: Icons.verified_user_rounded,
+        iconColor: BillifyColors.paid,
+        title: 'Email Verification',
+        subtitle: FirebaseAuth.instance.currentUser?.emailVerified == true
+            ? 'Your email is verified ✓'
+            : 'Tap to send verification email',
+        isLast: true,
+        onTap: FirebaseAuth.instance.currentUser?.emailVerified == true
+            ? null
+            : () async {
+          try {
+            await FirebaseAuth.instance.currentUser
+                ?.sendEmailVerification();
+            Get.snackbar(
+              'Verification Sent',
+              'Check your inbox for the verification link',
+              backgroundColor: BillifyColors.paid,
+              colorText: Colors.white,
+              snackPosition: SnackPosition.TOP,
+            );
+          } catch (_) {
+            Get.snackbar(
+              'Error',
+              'Could not send verification email',
+              backgroundColor: BillifyColors.unpaid,
+              colorText: Colors.white,
+            );
+          }
+        },
+      ),
+    ]);
+  }
+
+  Widget _buildDataStorageCard() {
+    return _card(children: [
+      _tile(
+        icon: Icons.cleaning_services_rounded,
+        iconColor: const Color(0xFF00ACC1),
+        title: 'Clear Local Cache',
+        subtitle: 'Remove cached profile & settings data',
+        onTap: _clearAllData,
+      ),
+      StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseAuth.instance.currentUser != null
+            ? FirebaseFirestore.instance
+            .collection('users')
+            .doc(FirebaseAuth.instance.currentUser!.uid)
+            .snapshots()
+            : const Stream.empty(),
+        builder: (context, snap) {
+          final isConnected = snap.connectionState == ConnectionState.active &&
+              !snap.hasError;
+          final isFromCache = snap.data?.metadata.isFromCache ?? false;
+          final statusLabel =
+          snap.connectionState == ConnectionState.waiting
+              ? 'Connecting…'
+              : snap.hasError
+              ? 'Offline'
+              : isFromCache
+              ? 'Cached'
+              : 'Live';
+          final statusColor = snap.hasError || isFromCache
+              ? BillifyColors.overdue
+              : isConnected
+              ? BillifyColors.paid
+              : BillifyColors.textSecondary;
+
+          return _tile(
+            icon: snap.hasError
+                ? Icons.cloud_off_rounded
+                : Icons.cloud_done_rounded,
+            iconColor: statusColor,
+            title: 'Cloud Sync',
+            subtitle: isConnected && !isFromCache
+                ? 'All data syncing in real-time'
+                : snap.hasError
+                ? 'Check your internet connection'
+                : 'Last synced data shown',
+            isLast: true,
+            trailing: Container(
+              padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.12),
+                borderRadius: BorderRadius.zero,
+              ),
+              child: Text(
+                statusLabel,
+                style: GoogleFonts.nunito(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: statusColor,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    ]);
+  }
+
+  Widget _buildAboutCard() {
+    return _card(children: [
+      _tile(
+        icon: Icons.info_outline_rounded,
+        iconColor: BillifyColors.primary,
+        title: 'App Version',
+        subtitle: 'Billify v1.0.0',
+        isLast: false,
+        trailing: const SizedBox.shrink(),
+      ),
+      _tile(
+        icon: Icons.description_rounded,
+        iconColor: BillifyColors.textSecondary,
+        title: 'Terms & Conditions',
+        onTap: () => Get.toNamed(AppRoutes.termsConditions),
+      ),
+      _tile(
+        icon: Icons.privacy_tip_rounded,
+        iconColor: const Color(0xFF5C6BC0),
+        title: 'Privacy Policy',
+        subtitle: 'Your data is stored securely on Firebase',
+        isLast: true,
+        onTap: () => Get.snackbar(
+          'Privacy Policy',
+          'Billify stores your data securely using Google Firebase. We never sell or share your data.',
+          backgroundColor: BillifyColors.primary,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 5),
+          snackPosition: SnackPosition.BOTTOM,
+        ),
+      ),
+    ]);
+  }
+
+  Widget _buildDangerZoneCard() {
+    return _card(children: [
+      _tile(
+        icon: Icons.delete_forever_rounded,
+        iconColor: BillifyColors.unpaid,
+        title: 'Delete Account',
+        subtitle: 'Permanently remove your account & all data',
+        isLast: true,
+        onTap: _deleteAccount,
+        trailing: const Icon(
+          Icons.chevron_right_rounded,
+          color: BillifyColors.unpaid,
+          size: 18,
+        ),
+      ),
+    ]);
   }
 }
