@@ -1,7 +1,22 @@
 // ════════════════════════════════════════════════════════════
-//  dashboard_screen.dart — Billify Phase 2
-//  Full Dashboard with summary cards, bar chart, recent invoices
-//  and quick-action FABs. Reads live data from Firestore.
+//  dashboard_screen.dart — Billify Phase 2 (Client-Centric)
+//
+//  All financial summaries are derived from the CLIENT
+//  collection, NOT from invoices.  Each ClientModel carries:
+//    • paymentAmount   → real project value
+//    • paymentStatus   → Pending | Advance | Completed | Overdue
+//    • createdAt       → used for the monthly bar chart
+//
+//  Summary cards:
+//    • Completed       → count + sum of Completed clients
+//    • Advance         → count + sum of Advance clients
+//    • Pending         → count + sum of Pending clients
+//    • Total Expenses  → expense collection
+//    • Net Balance     → (Completed + Advance) − Expenses
+//    • Active Clients  → total client count
+//
+//  Overdue is intentionally excluded from the summary cards.
+//  Bar chart income = Completed + Advance client payments.
 // ════════════════════════════════════════════════════════════
 
 import 'package:flutter/material.dart';
@@ -23,55 +38,196 @@ import 'main.dart'
     BillifyDialog;
 import 'expense_screens.dart' show ExpenseListScreen, AddExpenseScreen;
 import 'client_screens.dart' show DashboardRecentClients;
-import 'web_layout.dart' show WebScaffold;
+import 'web_layout.dart' show WebScaffold, WebLayoutService;
+
+// ── Desktop-safe navigation ────────────────────────────────
+void _navTo(String route, {Object? arguments}) {
+  if (Get.isRegistered<WebLayoutService>()) {
+    WebLayoutService.to.syncRoute(route);
+  }
+  Get.toNamed(route, arguments: arguments);
+}
 
 // ────────────────────────────────────────────────────────────
-//  DATA MODELS (lightweight, dashboard-only)
+//  DATA MODELS
 // ────────────────────────────────────────────────────────────
 
 class _DashboardData {
-  final double totalRevenue;
-  final int pendingCount;
-  final int paidCount;
+  // ── Client-derived financials ──
+  final double completedValue;     // sum of Completed client paymentAmounts
+  final int completedCount;        // count of Completed clients
+  final double advanceValue;       // sum of Advance client paymentAmounts
+  final int advanceCount;          // count of Advance clients
+  final double pendingValue;       // sum of Pending client paymentAmounts
+  final int pendingCount;          // count of Pending clients
+  final int totalClients;
+
+  // ── Expense-collection-derived ──
   final double totalExpense;
-  final double netBalance;
-  final List<_MonthBar> monthBars;
-  final List<_RecentInvoice> recent;
+
+  // ── Derived ──
+  final double netBalance;         // (completed + advance) - expenses
+
+  // ── Chart ──
+  final List<_MonthBar> monthBars; // income vs expense per month
+
+  // ── Recent client activity ──
+  final List<_RecentClient> recentClients;
 
   const _DashboardData({
-    required this.totalRevenue,
+    required this.completedValue,
+    required this.completedCount,
+    required this.advanceValue,
+    required this.advanceCount,
+    required this.pendingValue,
     required this.pendingCount,
-    required this.paidCount,
+    required this.totalClients,
     required this.totalExpense,
     required this.netBalance,
     required this.monthBars,
-    required this.recent,
+    required this.recentClients,
   });
 }
 
 class _MonthBar {
   final String label;
-  final double income;
-  final double expense;
+  final double income;   // from clients (completed + advance)
+  final double expense;  // from expense collection
   const _MonthBar(this.label, this.income, this.expense);
 }
 
-class _RecentInvoice {
-  final String invoiceNumber;
-  final String clientName;
-  final double totalAmount;
-  final String status;
-  final DateTime date;
-  final String invoiceId;
+class _RecentClient {
+  final String id;
+  final String name;
+  final String mobile;
+  final double paymentAmount;
+  final String paymentStatus;
+  final String clientCategory;
+  final DateTime createdAt;
 
-  const _RecentInvoice({
-    required this.invoiceNumber,
-    required this.clientName,
-    required this.totalAmount,
-    required this.status,
-    required this.date,
-    required this.invoiceId,
+  const _RecentClient({
+    required this.id,
+    required this.name,
+    required this.mobile,
+    required this.paymentAmount,
+    required this.paymentStatus,
+    required this.clientCategory,
+    required this.createdAt,
   });
+}
+
+// ────────────────────────────────────────────────────────────
+//  COMPUTE FUNCTION  (pure, no BuildContext needed)
+// ────────────────────────────────────────────────────────────
+
+_DashboardData _compute(
+    QuerySnapshot clientSnap,
+    QuerySnapshot expenseSnap,
+    ) {
+  final now = DateTime.now();
+
+  // Initialise 4-month rolling window
+  final Map<String, double> incomeByMonth = {};
+  final Map<String, double> expenseByMonth = {};
+  for (int i = 3; i >= 0; i--) {
+    final m = DateTime(now.year, now.month - i, 1);
+    final key = DateFormat('MMM').format(m);
+    incomeByMonth[key] = 0;
+    expenseByMonth[key] = 0;
+  }
+
+  // ── Aggregate clients ──────────────────────────────────
+  double completedValue = 0;
+  int completedCount = 0;
+  double advanceValue = 0;
+  int advanceCount = 0;
+  double pendingValue = 0;
+  int pendingCount = 0;
+  final List<_RecentClient> allClients = [];
+
+  for (final doc in clientSnap.docs) {
+    final d = doc.data() as Map<String, dynamic>;
+    final status = (d['paymentStatus'] as String? ?? 'Pending');
+    final amount = ((d['paymentAmount'] ?? 0) as num).toDouble();
+    final ts = (d['createdAt'] ?? d['updatedAt']) as Timestamp?;
+    final date = ts?.toDate() ?? now;
+    final mKey = DateFormat('MMM').format(date);
+
+    switch (status.toLowerCase()) {
+      case 'completed':
+        completedValue += amount;
+        completedCount++;
+        if (incomeByMonth.containsKey(mKey)) {
+          incomeByMonth[mKey] = incomeByMonth[mKey]! + amount;
+        }
+        break;
+      case 'advance':
+        advanceValue += amount;
+        advanceCount++;
+        if (incomeByMonth.containsKey(mKey)) {
+          incomeByMonth[mKey] = incomeByMonth[mKey]! + amount;
+        }
+        break;
+      case 'pending':
+        pendingValue += amount;
+        pendingCount++;
+        break;
+    // 'overdue' is tracked per-client but excluded from summary cards
+    }
+
+    allClients.add(_RecentClient(
+      id: doc.id,
+      name: (d['name'] as String? ?? ''),
+      mobile: (d['mobile'] as String? ?? ''),
+      paymentAmount: amount,
+      paymentStatus: status,
+      clientCategory: (d['clientCategory'] as String? ?? ''),
+      createdAt: date,
+    ));
+  }
+
+  // ── Aggregate expenses ─────────────────────────────────
+  double totalExpense = 0;
+  for (final doc in expenseSnap.docs) {
+    final d = doc.data() as Map<String, dynamic>;
+    final type = (d['type'] ?? 'expense') as String;
+    final amt = ((d['netAmount'] ?? d['amount'] ?? 0) as num).toDouble();
+    final ts = (d['date'] ?? d['createdAt']) as Timestamp?;
+    final date = ts?.toDate() ?? now;
+    final mKey = DateFormat('MMM').format(date);
+
+    if (type == 'expense') {
+      totalExpense += amt;
+      if (expenseByMonth.containsKey(mKey)) {
+        expenseByMonth[mKey] = expenseByMonth[mKey]! + amt;
+      }
+    }
+    // Note: 'income' type in expense collection is intentionally ignored here —
+    // all income is now derived from clients only.
+  }
+
+  // ── Sort clients by most recently added ───────────────
+  allClients.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  final earnedIncome = completedValue + advanceValue;
+
+  final monthBars = incomeByMonth.keys
+      .map((k) => _MonthBar(k, incomeByMonth[k]!, expenseByMonth[k]!))
+      .toList();
+
+  return _DashboardData(
+    completedValue: completedValue,
+    completedCount: completedCount,
+    advanceValue: advanceValue,
+    advanceCount: advanceCount,
+    pendingValue: pendingValue,
+    pendingCount: pendingCount,
+    totalClients: allClients.length,
+    totalExpense: totalExpense,
+    netBalance: earnedIncome - totalExpense,
+    monthBars: monthBars,
+    recentClients: allClients.take(5).toList(),
+  );
 }
 
 // ────────────────────────────────────────────────────────────
@@ -81,105 +237,21 @@ class _RecentInvoice {
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
-  static _DashboardData _compute(
-      QuerySnapshot invoiceSnap,
-      QuerySnapshot expenseSnap,
-      ) {
-    double totalRevenue = 0;
-    int pendingCount = 0;
-    int paidCount = 0;
-    final List<_RecentInvoice> allInvoices = [];
-
-    final now = DateTime.now();
-    final Map<String, double> incomeByMonth = {};
-    final Map<String, double> expenseByMonth = {};
-
-    for (int i = 3; i >= 0; i--) {
-      final m = DateTime(now.year, now.month - i, 1);
-      final key = DateFormat('MMM').format(m);
-      incomeByMonth[key] = 0;
-      expenseByMonth[key] = 0;
-    }
-
-    for (final doc in invoiceSnap.docs) {
-      final d = doc.data() as Map<String, dynamic>;
-      final status = (d['status'] ?? 'draft') as String;
-      final amount = ((d['totalAmount'] ?? 0) as num).toDouble();
-      final ts =
-      (d['createdAt'] ?? d['orderDate'] ?? d['invoiceDate']) as Timestamp?;
-      final date = ts?.toDate() ?? DateTime.now();
-
-      if (status == 'paid') {
-        totalRevenue += amount;
-        paidCount++;
-      }
-      if (status == 'unpaid' || status == 'overdue') pendingCount++;
-
-      final mKey = DateFormat('MMM').format(date);
-      if (incomeByMonth.containsKey(mKey) && status == 'paid') {
-        incomeByMonth[mKey] = incomeByMonth[mKey]! + amount;
-      }
-
-      allInvoices.add(_RecentInvoice(
-        invoiceId: doc.id,
-        invoiceNumber: (d['invoiceNumber'] ?? '') as String,
-        clientName: (d['clientName'] ?? '') as String,
-        totalAmount: amount,
-        status: status,
-        date: date,
-      ));
-    }
-
-    double totalExpense = 0;
-    for (final doc in expenseSnap.docs) {
-      final d = doc.data() as Map<String, dynamic>;
-      final type = (d['type'] ?? 'expense') as String;
-      final amt = ((d['netAmount'] ?? d['amount'] ?? 0) as num).toDouble();
-      final ts = (d['date'] ?? d['createdAt']) as Timestamp?;
-      final date = ts?.toDate() ?? DateTime.now();
-      final mKey = DateFormat('MMM').format(date);
-
-      if (type == 'expense') {
-        totalExpense += amt;
-        if (expenseByMonth.containsKey(mKey)) {
-          expenseByMonth[mKey] = expenseByMonth[mKey]! + amt;
-        }
-      } else if (type == 'income') {
-        if (incomeByMonth.containsKey(mKey)) {
-          incomeByMonth[mKey] = incomeByMonth[mKey]! + amt;
-        }
-      }
-    }
-
-    allInvoices.sort((a, b) => b.date.compareTo(a.date));
-
-    final monthBars = incomeByMonth.keys
-        .map((k) => _MonthBar(k, incomeByMonth[k]!, expenseByMonth[k]!))
-        .toList();
-
-    return _DashboardData(
-      totalRevenue: totalRevenue,
-      pendingCount: pendingCount,
-      paidCount: paidCount,
-      totalExpense: totalExpense,
-      netBalance: totalRevenue - totalExpense,
-      monthBars: monthBars,
-      recent: allInvoices.take(5).toList(),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     final fmt = AppSettings.currencyFmt();
 
-    final invoiceStream = FirebaseFirestore.instance
+    // ── Firestore streams ──────────────────────────────────
+    // PRIMARY source of truth: clients
+    final clientStream = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
-        .collection('invoices')
+        .collection('clients')
         .orderBy('createdAt', descending: true)
         .snapshots();
 
+    // SECONDARY: expenses only (for net balance & chart)
     final expenseStream = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -206,9 +278,7 @@ class DashboardScreen extends StatelessWidget {
             onConfirm: () => Navigator.of(ctx).pop(true),
           ),
         );
-        if (shouldExit == true) {
-          SystemNavigator.pop();
-        }
+        if (shouldExit == true) SystemNavigator.pop();
       },
       child: WebScaffold(
         activeRoute: AppRoutes.dashboard,
@@ -217,7 +287,7 @@ class DashboardScreen extends StatelessWidget {
         body: _buildBody(
           context: context,
           fmt: fmt,
-          invoiceStream: invoiceStream,
+          clientStream: clientStream,
           expenseStream: expenseStream,
           userStream: userStream,
         ),
@@ -225,14 +295,12 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // ── AppBar ──────────────────────────────────────────────────
+  // ── AppBar ──────────────────────────────────────────────
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: BillifyColors.background,
       elevation: 0,
-      // hamburger is auto-provided by Scaffold on mobile;
-      // on desktop WebScaffold renders no Scaffold so no hamburger appears.
       title: Text(
         'DASHBOARD',
         style: GoogleFonts.poppins(
@@ -244,18 +312,21 @@ class DashboardScreen extends StatelessWidget {
       ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
-        child: Container(height: 1, color: BillifyColors.outlineVariant.withOpacity(0.4)),
+        child: Container(
+            height: 1,
+            color: BillifyColors.outlineVariant.withOpacity(0.4)),
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.notifications_outlined, color: BillifyColors.textSecondary, size: 20),
+          icon: const Icon(Icons.notifications_outlined,
+              color: BillifyColors.textSecondary, size: 20),
           onPressed: () {},
         ),
       ],
     );
   }
 
-  // ── FABs ────────────────────────────────────────────────────
+  // ── FABs ────────────────────────────────────────────────
 
   Widget _buildFABs() {
     return Column(
@@ -263,59 +334,60 @@ class DashboardScreen extends StatelessWidget {
       children: [
         FloatingActionButton.extended(
           heroTag: 'fab_expense',
-          onPressed: () => Get.toNamed(AppRoutes.expenseAdd),
+          onPressed: () => _navTo(AppRoutes.expenseAdd),
           icon: const Icon(Icons.add, size: 18),
           label: Text(
             'ADD EXPENSE',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
+            style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
           ),
           backgroundColor: BillifyColors.surfaceHigh,
           foregroundColor: BillifyColors.textPrimary,
           elevation: 0,
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          shape:
+          const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         ),
         const SizedBox(height: 8),
         FloatingActionButton.extended(
-          heroTag: 'fab_invoice',
-          onPressed: () => Get.toNamed(AppRoutes.invoiceCreate),
-          icon: const Icon(Icons.receipt_long_rounded, size: 18),
+          heroTag: 'fab_client',
+          onPressed: () => _navTo(AppRoutes.clientAdd),
+          icon: const Icon(Icons.person_add_rounded, size: 18),
           label: Text(
-            'NEW INVOICE',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
+            'NEW CLIENT',
+            style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
           ),
           backgroundColor: BillifyColors.primary,
           foregroundColor: const Color(0xFFF7F7FF),
           elevation: 0,
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          shape:
+          const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         ),
       ],
     );
   }
 
-  // ── Body ────────────────────────────────────────────────────
+  // ── Body ────────────────────────────────────────────────
 
   Widget _buildBody({
     required BuildContext context,
     required NumberFormat fmt,
-    required Stream<QuerySnapshot> invoiceStream,
+    required Stream<QuerySnapshot> clientStream,
     required Stream<QuerySnapshot> expenseStream,
     required Stream<DocumentSnapshot> userStream,
   }) {
     return StreamBuilder<QuerySnapshot>(
-      stream: invoiceStream,
-      builder: (context, invoiceSnap) {
+      stream: clientStream,
+      builder: (context, clientSnap) {
         return StreamBuilder<QuerySnapshot>(
           stream: expenseStream,
           builder: (context, expenseSnap) {
             final _DashboardData? d =
-            (invoiceSnap.hasData && expenseSnap.hasData)
-                ? _compute(invoiceSnap.data!, expenseSnap.data!)
-                : invoiceSnap.hasData
+            (clientSnap.hasData && expenseSnap.hasData)
+                ? _compute(clientSnap.data!, expenseSnap.data!)
+                : clientSnap.hasData
                 ? _compute(
-              invoiceSnap.data!,
-              expenseSnap.data ??
-                  const _EmptyQuerySnapshot(),
-            )
+                clientSnap.data!, _EmptyQuerySnapshot())
                 : null;
 
             return StreamBuilder<DocumentSnapshot>(
@@ -330,20 +402,18 @@ class DashboardScreen extends StatelessWidget {
                 final userName =
                 fullName.isNotEmpty ? fullName.split(' ').first : '';
 
-                if (invoiceSnap.connectionState == ConnectionState.waiting &&
-                    !invoiceSnap.hasData) {
+                if (clientSnap.connectionState == ConnectionState.waiting &&
+                    !clientSnap.hasData) {
                   return const Center(
                     child: CircularProgressIndicator(
-                      color: BillifyColors.primary,
-                    ),
+                        color: BillifyColors.primary),
                   );
                 }
 
                 return RefreshIndicator(
                   color: BillifyColors.primary,
-                  onRefresh: () async {
-                    await Future.delayed(const Duration(milliseconds: 400));
-                  },
+                  onRefresh: () async =>
+                      Future.delayed(const Duration(milliseconds: 400)),
                   child: CustomScrollView(
                     slivers: [
                       SliverToBoxAdapter(
@@ -356,9 +426,10 @@ class DashboardScreen extends StatelessWidget {
                         SliverToBoxAdapter(
                           child: _BarChartCard(bars: d.monthBars),
                         ),
+                      // Recent clients activity feed (replaces invoice list)
                       SliverToBoxAdapter(
-                        child: _RecentInvoicesSection(
-                          invoices: d?.recent ?? [],
+                        child: _RecentClientsSection(
+                          clients: d?.recentClients ?? [],
                           fmt: fmt,
                         ),
                       ),
@@ -382,6 +453,14 @@ class DashboardScreen extends StatelessWidget {
 
 // ────────────────────────────────────────────────────────────
 //  SUMMARY CARDS SECTION
+//
+//  Layout (bento grid):
+//  ┌──────────────────┬────────────────┐
+//  │  Completed       │  Advance       │  ← Row 1
+//  ├────────┬─────────┴────────────────┤
+//  │Pending │  Total Expenses │Net Bal  │  ← Row 2
+//  └────────┴────────────────┴─────────┘
+//  │        Active Clients             │  ← Row 3 (full width)
 // ────────────────────────────────────────────────────────────
 
 class _SummaryCardsSection extends StatelessWidget {
@@ -404,64 +483,81 @@ class _SummaryCardsSection extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
               children: [
-                Container(width: 3, height: 14, color: BillifyColors.primary),
+                Container(
+                    width: 3, height: 14, color: BillifyColors.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'FISCAL SUMMARY',
+                  'CLIENT FINANCIALS',
                   style: GoogleFonts.poppins(
-                    fontSize: 9, fontWeight: FontWeight.w800,
-                    letterSpacing: 1.8, color: BillifyColors.primary,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.8,
+                    color: BillifyColors.primary,
                   ),
                 ),
               ],
             ),
           ),
-          // Bento grid — gap: 1px for seamless ledger look
           Column(
             children: [
-              // Row 1
+              // ── Row 1: Completed | Advance ────────────────────
               IntrinsicHeight(
                 child: Row(
                   children: [
                     Expanded(
-                      flex: 3,
                       child: _SummaryCard(
-                        label: 'Total Revenue',
-                        value: fmt.format(d!.totalRevenue),
-                        icon: Icons.trending_up_rounded,
+                        label: 'Completed',
+                        value: fmt.format(d!.completedValue),
+                        subLabel: '${d!.completedCount} client${d!.completedCount == 1 ? '' : 's'}',
+                        icon: Icons.check_circle_rounded,
                         color: BillifyColors.paid,
                         bgColor: const Color(0xFFE8F5E9),
-                        onTap: () => Get.toNamed(AppRoutes.invoices, arguments: {'filter': 'paid_only'}),
+                        onTap: () => _navTo(AppRoutes.clients,
+                            arguments: {'filter': 'Completed'}),
                       ),
                     ),
                     const SizedBox(width: 1),
                     Expanded(
-                      flex: 2,
                       child: _SummaryCard(
-                        label: 'Pending',
-                        value: '${d!.pendingCount} inv.',
-                        icon: Icons.hourglass_bottom_rounded,
-                        color: BillifyColors.overdue,
-                        bgColor: const Color(0xFFFFF3E0),
-                        onTap: () => Get.toNamed(AppRoutes.invoices, arguments: {'filter': 'pending_only'}),
+                        label: 'Advance',
+                        value: fmt.format(d!.advanceValue),
+                        subLabel: '${d!.advanceCount} client${d!.advanceCount == 1 ? '' : 's'}',
+                        icon: Icons.timelapse_rounded,
+                        color: const Color(0xFF1976D2),
+                        bgColor: const Color(0xFFE3F2FD),
+                        onTap: () => _navTo(AppRoutes.clients,
+                            arguments: {'filter': 'Advance'}),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 1),
-              // Row 2
+              // ── Row 2: Pending | Expenses | Net Balance ───────
               IntrinsicHeight(
                 child: Row(
                   children: [
                     Expanded(
                       child: _SummaryCard(
-                        label: 'Total Expenses',
-                        value: fmt.format(d!.totalExpense),
-                        icon: Icons.arrow_upward_rounded,
+                        label: 'Pending',
+                        value: fmt.format(d!.pendingValue),
+                        subLabel: '${d!.pendingCount} client${d!.pendingCount == 1 ? '' : 's'}',
+                        icon: Icons.hourglass_bottom_rounded,
                         color: BillifyColors.unpaid,
                         bgColor: const Color(0xFFFFEBEE),
-                        onTap: () => Get.toNamed(AppRoutes.expenses),
+                        onTap: () => _navTo(AppRoutes.clients,
+                            arguments: {'filter': 'Pending'}),
+                      ),
+                    ),
+                    const SizedBox(width: 1),
+                    Expanded(
+                      child: _SummaryCard(
+                        label: 'Expenses',
+                        value: fmt.format(d!.totalExpense),
+                        icon: Icons.arrow_upward_rounded,
+                        color: const Color(0xFFE53935),
+                        bgColor: const Color(0xFFFFEBEE),
+                        onTap: () => _navTo(AppRoutes.expenses),
                       ),
                     ),
                     const SizedBox(width: 1),
@@ -470,23 +566,27 @@ class _SummaryCardsSection extends StatelessWidget {
                         label: 'Net Balance',
                         value: fmt.format(d!.netBalance),
                         icon: Icons.account_balance_wallet_rounded,
-                        color: d!.netBalance >= 0 ? BillifyColors.paid : BillifyColors.unpaid,
-                        bgColor: d!.netBalance >= 0 ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
-                      ),
-                    ),
-                    const SizedBox(width: 1),
-                    Expanded(
-                      child: _SummaryCard(
-                        label: 'Paid Invoices',
-                        value: '${d!.paidCount} inv.',
-                        icon: Icons.check_circle_rounded,
-                        color: BillifyColors.primary,
-                        bgColor: const Color(0xFFE8EAF6),
-                        onTap: () => Get.toNamed(AppRoutes.invoices, arguments: {'filter': 'paid_only'}),
+                        color: d!.netBalance >= 0
+                            ? BillifyColors.paid
+                            : BillifyColors.unpaid,
+                        bgColor: d!.netBalance >= 0
+                            ? const Color(0xFFE8F5E9)
+                            : const Color(0xFFFFEBEE),
                       ),
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 1),
+              // ── Row 3: Active Clients (full width) ────────────
+              _SummaryCard(
+                label: 'Active Clients',
+                value: '${d!.totalClients} client${d!.totalClients == 1 ? '' : 's'}',
+                icon: Icons.people_rounded,
+                color: BillifyColors.primary,
+                bgColor: const Color(0xFFE8EAF6),
+                isWide: true,
+                onTap: () => _navTo(AppRoutes.clients),
               ),
             ],
           ),
@@ -497,7 +597,7 @@ class _SummaryCardsSection extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
-//  HEADER BANNER
+//  HEADER BANNER  (unchanged visual, updated sub-text)
 // ────────────────────────────────────────────────────────────
 
 class _HeaderBanner extends StatelessWidget {
@@ -518,29 +618,25 @@ class _HeaderBanner extends StatelessWidget {
       color: BillifyColors.primary,
       child: Stack(
         children: [
-          // Architectural dot grid
-          Positioned.fill(
-            child: CustomPaint(painter: _DashGridPainter()),
-          ),
+          Positioned.fill(child: CustomPaint(painter: _DashGridPainter())),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Operational status label
                 Text(
-                  'OPERATIONAL STATUS',
+                  'CLIENT OVERVIEW',
                   style: GoogleFonts.poppins(
                     color: const Color(0xFFF7F7FF).withOpacity(0.5),
-                    fontSize: 8, fontWeight: FontWeight.w800,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w800,
                     letterSpacing: 2.0,
                   ),
                 ),
                 const SizedBox(height: 6),
-                // Large editorial headline
                 Text(
                   userName.isEmpty
-                      ? 'Fiscal Summary.'
+                      ? 'Client Summary.'
                       : '${_greeting()},\n${userName.split(' ').first}.',
                   style: GoogleFonts.poppins(
                     color: const Color(0xFFF7F7FF),
@@ -552,10 +648,13 @@ class _HeaderBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  DateFormat('EEEE, d MMMM yyyy').format(DateTime.now()).toUpperCase(),
+                  DateFormat('EEEE, d MMMM yyyy')
+                      .format(DateTime.now())
+                      .toUpperCase(),
                   style: GoogleFonts.poppins(
                     color: const Color(0xFFF7F7FF).withOpacity(0.55),
-                    fontSize: 9, fontWeight: FontWeight.w700,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: 1.5,
                   ),
                 ),
@@ -568,7 +667,6 @@ class _HeaderBanner extends StatelessWidget {
   }
 }
 
-// Dot grid painter for dashboard header
 class _DashGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -582,21 +680,24 @@ class _DashGridPainter extends CustomPainter {
       }
     }
   }
+
   @override
   bool shouldRepaint(_DashGridPainter old) => false;
 }
 
 // ────────────────────────────────────────────────────────────
-//  SUMMARY CARD
+//  SUMMARY CARD  (updated: optional subLabel)
 // ────────────────────────────────────────────────────────────
 
 class _SummaryCard extends StatelessWidget {
   final String label;
   final String value;
+  final String? subLabel;
   final IconData icon;
   final Color color;
   final Color bgColor;
   final VoidCallback? onTap;
+  final bool isWide;
 
   const _SummaryCard({
     required this.label,
@@ -604,7 +705,9 @@ class _SummaryCard extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.bgColor,
+    this.subLabel,
     this.onTap,
+    this.isWide = false,
   });
 
   @override
@@ -612,17 +715,63 @@ class _SummaryCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        width: isWide ? double.infinity : null,
         decoration: BoxDecoration(
           color: BillifyColors.surface,
           border: Border(
             top: BorderSide(color: color, width: 2),
-            left: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.3), width: 0.5),
-            right: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.3), width: 0.5),
-            bottom: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.3), width: 0.5),
+            left: BorderSide(
+                color: BillifyColors.outlineVariant.withOpacity(0.3),
+                width: 0.5),
+            right: BorderSide(
+                color: BillifyColors.outlineVariant.withOpacity(0.3),
+                width: 0.5),
+            bottom: BorderSide(
+                color: BillifyColors.outlineVariant.withOpacity(0.3),
+                width: 0.5),
           ),
         ),
         padding: const EdgeInsets.all(14),
-        child: Column(
+        child: isWide
+            ? Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              color: bgColor,
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: GoogleFonts.poppins(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: BillifyColors.textPrimary,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  Text(
+                    label.toUpperCase(),
+                    style: GoogleFonts.poppins(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      color: BillifyColors.textSecondary,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (onTap != null)
+              const Icon(Icons.arrow_forward_rounded,
+                  size: 14, color: BillifyColors.outlineVariant),
+          ],
+        )
+            : Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -631,7 +780,9 @@ class _SummaryCard extends StatelessWidget {
               children: [
                 Icon(icon, color: color, size: 18),
                 if (onTap != null)
-                  const Icon(Icons.arrow_forward_rounded, size: 12, color: BillifyColors.outlineVariant),
+                  const Icon(Icons.arrow_forward_rounded,
+                      size: 12,
+                      color: BillifyColors.outlineVariant),
               ],
             ),
             const SizedBox(height: 12),
@@ -640,16 +791,31 @@ class _SummaryCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.poppins(
-                fontSize: 15, fontWeight: FontWeight.w900,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
                 color: BillifyColors.textPrimary,
                 letterSpacing: -0.3,
               ),
             ),
+            if (subLabel != null) ...[
+              const SizedBox(height: 1),
+              Text(
+                subLabel!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: color.withOpacity(0.8),
+                ),
+              ),
+            ],
             const SizedBox(height: 2),
             Text(
               label.toUpperCase(),
               style: GoogleFonts.poppins(
-                fontSize: 8, fontWeight: FontWeight.w700,
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
                 color: BillifyColors.textSecondary,
                 letterSpacing: 0.8,
               ),
@@ -662,7 +828,7 @@ class _SummaryCard extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
-//  BAR CHART CARD
+//  BAR CHART CARD  (income now = client payments, not invoices)
 // ────────────────────────────────────────────────────────────
 
 class _BarChartCard extends StatelessWidget {
@@ -680,13 +846,15 @@ class _BarChartCard extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       decoration: BoxDecoration(
         color: BillifyColors.surface,
-        border: Border.all(color: BillifyColors.outlineVariant.withOpacity(0.3), width: 0.5),
+        border: Border.all(
+            color: BillifyColors.outlineVariant.withOpacity(0.3),
+            width: 0.5),
       ),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildChartHeader(context),
+          _buildChartHeader(),
           const SizedBox(height: 14),
           _buildChart(context, chartMax),
         ],
@@ -694,16 +862,18 @@ class _BarChartCard extends StatelessWidget {
     );
   }
 
-  Widget _buildChartHeader(BuildContext context) {
+  Widget _buildChartHeader() {
     return Row(
       children: [
         Container(width: 3, height: 14, color: BillifyColors.primary),
         const SizedBox(width: 8),
         Text(
-          'INCOME VS EXPENSE',
+          'CLIENT INCOME VS EXPENSE',
           style: GoogleFonts.poppins(
-            fontSize: 9, fontWeight: FontWeight.w800,
-            letterSpacing: 1.8, color: BillifyColors.primary,
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.8,
+            color: BillifyColors.primary,
           ),
         ),
         const Spacer(),
@@ -732,15 +902,12 @@ class _BarChartCard extends StatelessWidget {
           ),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
+            leftTitles:
+            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles:
+            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles:
+            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
@@ -754,8 +921,7 @@ class _BarChartCard extends StatelessWidget {
                       bars[idx].label,
                       style: GoogleFonts.nunito(
                         fontSize: 12,
-                        color:
-                        Theme.of(context).colorScheme.onSurfaceVariant,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -823,7 +989,8 @@ class _LegendDot extends StatelessWidget {
         Text(
           label.toUpperCase(),
           style: GoogleFonts.poppins(
-            fontSize: 8, fontWeight: FontWeight.w700,
+            fontSize: 8,
+            fontWeight: FontWeight.w700,
             letterSpacing: 0.8,
             color: BillifyColors.textSecondary,
           ),
@@ -834,13 +1001,14 @@ class _LegendDot extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
-//  RECENT INVOICES SECTION
+//  RECENT CLIENTS SECTION  (replaces Recent Invoices)
 // ────────────────────────────────────────────────────────────
 
-class _RecentInvoicesSection extends StatelessWidget {
-  final List<_RecentInvoice> invoices;
+class _RecentClientsSection extends StatelessWidget {
+  final List<_RecentClient> clients;
   final NumberFormat fmt;
-  const _RecentInvoicesSection({required this.invoices, required this.fmt});
+  const _RecentClientsSection(
+      {required this.clients, required this.fmt});
 
   @override
   Widget build(BuildContext context) {
@@ -849,23 +1017,33 @@ class _RecentInvoicesSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionHeader(context),
+          _buildSectionHeader(),
           const SizedBox(height: 8),
-          // Table header row
-          if (invoices.isNotEmpty)
+          if (clients.isNotEmpty)
             Container(
               color: BillifyColors.surfaceContainer,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(children: [
-                Expanded(flex: 3, child: Text('CLIENT ENTITY', style: _hStyle())),
-                Expanded(flex: 2, child: Text('AMOUNT', style: _hStyle(), textAlign: TextAlign.right)),
-                Expanded(flex: 2, child: Text('STATUS', style: _hStyle(), textAlign: TextAlign.center)),
+                Expanded(
+                    flex: 3,
+                    child: Text('CLIENT NAME', style: _hStyle())),
+                Expanded(
+                    flex: 2,
+                    child: Text('AMOUNT',
+                        style: _hStyle(), textAlign: TextAlign.right)),
+                Expanded(
+                    flex: 2,
+                    child: Text('STATUS',
+                        style: _hStyle(), textAlign: TextAlign.center)),
               ]),
             ),
-          invoices.isEmpty
-              ? _EmptyInvoiceState()
+          clients.isEmpty
+              ? _EmptyClientActivityState()
               : Column(
-            children: invoices.map((inv) => _InvoiceCard(invoice: inv, fmt: fmt)).toList(),
+            children: clients
+                .map((c) => _ClientActivityRow(client: c, fmt: fmt))
+                .toList(),
           ),
         ],
       ),
@@ -873,29 +1051,35 @@ class _RecentInvoicesSection extends StatelessWidget {
   }
 
   TextStyle _hStyle() => GoogleFonts.poppins(
-      fontSize: 8, fontWeight: FontWeight.w800,
-      letterSpacing: 1.2, color: BillifyColors.textSecondary);
+      fontSize: 8,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 1.2,
+      color: BillifyColors.textSecondary);
 
-  Widget _buildSectionHeader(BuildContext context) {
+  Widget _buildSectionHeader() {
     return Row(
       children: [
         Container(width: 3, height: 14, color: BillifyColors.primary),
         const SizedBox(width: 8),
         Text(
-          'RECENT LEDGER ENTRIES',
+          'RECENT CLIENT ACTIVITY',
           style: GoogleFonts.poppins(
-            fontSize: 9, fontWeight: FontWeight.w800,
-            letterSpacing: 1.8, color: BillifyColors.primary,
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.8,
+            color: BillifyColors.primary,
           ),
         ),
         const Spacer(),
         GestureDetector(
-          onTap: () => Get.toNamed(AppRoutes.invoices),
+          onTap: () => _navTo(AppRoutes.clients),
           child: Text(
             'VIEW ALL →',
             style: GoogleFonts.poppins(
-              fontSize: 8, fontWeight: FontWeight.w800,
-              letterSpacing: 1.2, color: BillifyColors.primary,
+              fontSize: 8,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+              color: BillifyColors.primary,
             ),
           ),
         ),
@@ -905,7 +1089,137 @@ class _RecentInvoicesSection extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
-//  SHARED STATUS HELPERS
+//  CLIENT ACTIVITY ROW
+// ────────────────────────────────────────────────────────────
+
+Color _clientStatusColor(String s) {
+  switch (s.toLowerCase()) {
+    case 'completed':
+      return BillifyColors.paid;
+    case 'advance':
+      return const Color(0xFF1976D2);
+    case 'overdue':
+      return BillifyColors.overdue;
+    default:
+      return BillifyColors.unpaid; // pending
+  }
+}
+
+Color _clientStatusBg(String s) {
+  switch (s.toLowerCase()) {
+    case 'completed':
+      return const Color(0xFFE8F5E9);
+    case 'advance':
+      return const Color(0xFFE3F2FD);
+    case 'overdue':
+      return const Color(0xFFFFF3E0);
+    default:
+      return const Color(0xFFFFEBEE);
+  }
+}
+
+class _ClientActivityRow extends StatelessWidget {
+  final _RecentClient client;
+  final NumberFormat fmt;
+  const _ClientActivityRow({required this.client, required this.fmt});
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = _clientStatusColor(client.paymentStatus);
+    final statusBg = _clientStatusBg(client.paymentStatus);
+
+    return GestureDetector(
+      onTap: () => _navTo(
+        AppRoutes.clientDetail,
+        arguments: {'clientId': client.id},
+      ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: BillifyColors.surface,
+          border: Border(
+            left: BorderSide(color: statusColor, width: 3),
+            bottom: BorderSide(
+                color: BillifyColors.outlineVariant.withOpacity(0.2),
+                width: 0.5),
+          ),
+        ),
+        padding:
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        child: Row(
+          children: [
+            // Client name + category
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    client.name.isEmpty ? 'Unknown Client' : client.name,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: BillifyColors.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '${client.clientCategory}  ·  ${AppSettings.formatDate(client.createdAt)}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 8,
+                      color: BillifyColors.textSecondary,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Amount
+            Expanded(
+              flex: 2,
+              child: Text(
+                AppSettings.showAmountOnList
+                    ? fmt.format(client.paymentAmount)
+                    : '—',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: BillifyColors.textPrimary,
+                ),
+                textAlign: TextAlign.right,
+              ),
+            ),
+            // Status badge
+            Expanded(
+              flex: 2,
+              child: Center(
+                child: Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  color: statusBg,
+                  child: Text(
+                    client.paymentStatus.toUpperCase(),
+                    style: GoogleFonts.poppins(
+                      fontSize: 7,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+//  SHARED STATUS HELPERS  (kept for invoice detail screens
+//  that still import from dashboard_screen.dart)
 // ────────────────────────────────────────────────────────────
 
 Color invoiceStatusColor(String s) {
@@ -914,8 +1228,8 @@ Color invoiceStatusColor(String s) {
       return BillifyColors.paid;
     case 'unpaid':
       return BillifyColors.unpaid;
-    case 'overdue':
-      return BillifyColors.overdue;
+    case 'advance':
+      return const Color(0xFF6A5ACD);
     default:
       return BillifyColors.draft;
   }
@@ -927,7 +1241,7 @@ Color invoiceStatusBg(String s) {
       return const Color(0xFFE8F5E9);
     case 'unpaid':
       return const Color(0xFFFFEBEE);
-    case 'overdue':
+    case 'advance':
       return const Color(0xFFFFF3E0);
     default:
       return const Color(0xFFF5F5F5);
@@ -940,7 +1254,7 @@ IconData invoiceStatusIcon(String s) {
       return Icons.check_circle_rounded;
     case 'unpaid':
       return Icons.schedule_rounded;
-    case 'overdue':
+    case 'advance':
       return Icons.warning_amber_rounded;
     default:
       return Icons.edit_rounded;
@@ -952,7 +1266,7 @@ Future<void> showStatusPicker(
     String invoiceId,
     String current,
     ) async {
-  final statuses = ['draft', 'unpaid', 'paid', 'overdue'];
+  final statuses = ['draft', 'unpaid', 'paid', 'advance'];
   await showModalBottomSheet(
     context: context,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
@@ -1027,7 +1341,6 @@ class _StatusPickerSheetState extends State<_StatusPickerSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Top accent bar
             Container(height: 3, color: BillifyColors.primary),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
@@ -1038,15 +1351,18 @@ class _StatusPickerSheetState extends State<_StatusPickerSheet> {
                   Text(
                     'SETTLEMENT STATUS',
                     style: GoogleFonts.poppins(
-                      fontSize: 10, fontWeight: FontWeight.w900,
-                      letterSpacing: 2.0, color: BillifyColors.primary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2.0,
+                      color: BillifyColors.primary,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Select a status below, then tap Apply',
                     style: GoogleFonts.nunito(
-                        fontSize: 12, color: BillifyColors.textSecondary),
+                        fontSize: 12,
+                        color: BillifyColors.textSecondary),
                   ),
                   const SizedBox(height: 14),
                   ...widget.statuses.map((s) {
@@ -1056,47 +1372,63 @@ class _StatusPickerSheetState extends State<_StatusPickerSheet> {
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 120),
                         margin: const EdgeInsets.only(bottom: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
                         decoration: BoxDecoration(
-                          color: isActive ? invoiceStatusBg(s) : BillifyColors.surfaceLow,
+                          color: isActive
+                              ? invoiceStatusBg(s)
+                              : BillifyColors.surfaceLow,
                           border: Border(
                             left: BorderSide(
-                              color: isActive ? invoiceStatusColor(s) : Colors.transparent,
+                              color: isActive
+                                  ? invoiceStatusColor(s)
+                                  : Colors.transparent,
                               width: 3,
                             ),
                           ),
                         ),
                         child: Row(children: [
-                          Icon(invoiceStatusIcon(s), color: invoiceStatusColor(s), size: 16),
+                          Icon(invoiceStatusIcon(s),
+                              color: invoiceStatusColor(s), size: 16),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               s.toUpperCase(),
                               style: GoogleFonts.poppins(
-                                fontSize: 10, fontWeight: FontWeight.w800,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
                                 letterSpacing: 1.0,
-                                color: isActive ? invoiceStatusColor(s) : BillifyColors.textPrimary,
+                                color: isActive
+                                    ? invoiceStatusColor(s)
+                                    : BillifyColors.textPrimary,
                               ),
                             ),
                           ),
                           if (s == widget.current)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              color: BillifyColors.outlineVariant.withOpacity(0.3),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              color: BillifyColors.outlineVariant
+                                  .withOpacity(0.3),
                               child: Text('CURRENT',
                                   style: GoogleFonts.poppins(
-                                      fontSize: 7, fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.8, color: BillifyColors.textSecondary)),
+                                      fontSize: 7,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.8,
+                                      color: BillifyColors.textSecondary)),
                             ),
                           if (isActive && s != widget.current)
-                            Icon(Icons.check_rounded, color: invoiceStatusColor(s), size: 16),
+                            Icon(Icons.check_rounded,
+                                color: invoiceStatusColor(s), size: 16),
                         ]),
                       ),
                     );
                   }),
                   const SizedBox(height: 8),
                   if (_saving)
-                    const Center(child: CircularProgressIndicator(color: BillifyColors.primary))
+                    const Center(
+                        child: CircularProgressIndicator(
+                            color: BillifyColors.primary))
                   else
                     ElevatedButton(
                       onPressed: _apply,
@@ -1105,107 +1437,19 @@ class _StatusPickerSheetState extends State<_StatusPickerSheet> {
                             ? BillifyColors.textSecondary
                             : invoiceStatusColor(_selected),
                         minimumSize: const Size(double.infinity, 48),
-                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                        shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero),
                         elevation: 0,
                       ),
                       child: Text(
                         'APPLY STATUS',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 1.5),
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            letterSpacing: 1.5),
                       ),
                     ),
                 ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ────────────────────────────────────────────────────────────
-//  INVOICE CARD
-// ────────────────────────────────────────────────────────────
-
-class _InvoiceCard extends StatelessWidget {
-  final _RecentInvoice invoice;
-  final NumberFormat fmt;
-  const _InvoiceCard({required this.invoice, required this.fmt});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Get.toNamed(
-        AppRoutes.invoiceDetail,
-        arguments: {'invoiceId': invoice.invoiceId},
-      ),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          color: BillifyColors.surface,
-          border: Border(
-            left: BorderSide(color: invoiceStatusColor(invoice.status), width: 3),
-            bottom: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.2), width: 0.5),
-          ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        child: Row(
-          children: [
-            // Client info
-            Expanded(
-              flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    invoice.clientName.isEmpty ? 'Unknown Client' : invoice.clientName,
-                    style: GoogleFonts.poppins(
-                      fontSize: 12, fontWeight: FontWeight.w700,
-                      color: BillifyColors.textPrimary,
-                    ),
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    '${invoice.invoiceNumber}  ·  ${AppSettings.formatDate(invoice.date)}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 8, color: BillifyColors.textSecondary,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Amount
-            Expanded(
-              flex: 2,
-              child: Text(
-                AppSettings.showAmountOnList ? fmt.format(invoice.totalAmount) : '—',
-                style: GoogleFonts.poppins(
-                  fontSize: 12, fontWeight: FontWeight.w800,
-                  color: BillifyColors.textPrimary,
-                ),
-                textAlign: TextAlign.right,
-              ),
-            ),
-            // Status
-            Expanded(
-              flex: 2,
-              child: GestureDetector(
-                onTap: () => showStatusPicker(context, invoice.invoiceId, invoice.status),
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    color: invoiceStatusBg(invoice.status),
-                    child: Text(
-                      invoice.status.toUpperCase(),
-                      style: GoogleFonts.poppins(
-                        fontSize: 7, fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                        color: invoiceStatusColor(invoice.status),
-                      ),
-                    ),
-                  ),
-                ),
               ),
             ),
           ],
@@ -1230,22 +1474,26 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           children: [
             Container(
-              width: 3, height: 32,
+              width: 3,
+              height: 32,
               color: BillifyColors.outlineVariant.withOpacity(0.4),
             ),
             const SizedBox(height: 12),
             Text(
-              'NO LEDGER ENTRIES',
+              'NO CLIENT DATA',
               style: GoogleFonts.poppins(
-                fontSize: 9, fontWeight: FontWeight.w800,
-                letterSpacing: 2.0, color: BillifyColors.textSecondary,
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.0,
+                color: BillifyColors.textSecondary,
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              'Create your first invoice to get started',
+              'Add your first client to get started',
               style: GoogleFonts.nunito(
-                fontSize: 12, color: BillifyColors.textSecondary,
+                fontSize: 12,
+                color: BillifyColors.textSecondary,
               ),
             ),
           ],
@@ -1255,36 +1503,41 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _EmptyInvoiceState extends StatelessWidget {
+class _EmptyClientActivityState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: BillifyColors.surface,
-        border: Border.all(color: BillifyColors.outlineVariant.withOpacity(0.3), width: 0.5),
+        border: Border.all(
+            color: BillifyColors.outlineVariant.withOpacity(0.3),
+            width: 0.5),
       ),
       child: Column(
         children: [
           Icon(
-            Icons.receipt_long_outlined,
+            Icons.people_outline_rounded,
             size: 40,
             color: BillifyColors.outlineVariant.withOpacity(0.5),
           ),
           const SizedBox(height: 10),
           Text(
-            'NO INVOICES YET',
+            'NO CLIENTS YET',
             style: GoogleFonts.poppins(
-              fontSize: 10, fontWeight: FontWeight.w800,
-              letterSpacing: 1.5, color: BillifyColors.textSecondary,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.5,
+              color: BillifyColors.textSecondary,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            'Tap "New Invoice" to begin your ledger',
+            'Add your first client to track activity',
             textAlign: TextAlign.center,
             style: GoogleFonts.nunito(
-              fontSize: 12, color: BillifyColors.textSecondary,
+              fontSize: 12,
+              color: BillifyColors.textSecondary,
             ),
           ),
           const SizedBox(height: 14),
@@ -1292,14 +1545,18 @@ class _EmptyInvoiceState extends StatelessWidget {
             width: double.infinity,
             height: 44,
             child: ElevatedButton(
-              onPressed: () => Get.toNamed(AppRoutes.invoiceCreate),
+              onPressed: () => _navTo(AppRoutes.clientAdd),
               style: ElevatedButton.styleFrom(
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero),
                 elevation: 0,
               ),
               child: Text(
-                'CREATE INVOICE',
-                style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5),
+                'ADD CLIENT',
+                style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.5),
               ),
             ),
           ),
@@ -1310,7 +1567,7 @@ class _EmptyInvoiceState extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
-//  EMPTY QUERY SNAPSHOT
+//  EMPTY QUERY SNAPSHOT  (fallback when expense stream pending)
 // ────────────────────────────────────────────────────────────
 
 class _EmptyQuerySnapshot implements QuerySnapshot<Map<String, dynamic>> {

@@ -106,11 +106,11 @@ class ClientModel {
 const _kClientCategories = [
   'Mobile Shoot',
   'Camera Shoot',
-  'Studio Shoot',
-  'Outdoor Shoot',
-  'Event Coverage',
-  'Portrait Session',
-  'Product Shoot',
+  'Edit',
+  // 'Outdoor Shoot',
+  // 'Event Coverage',
+  // 'Portrait Session',
+  // 'Product Shoot',
   'Custom',
 ];
 
@@ -124,7 +124,7 @@ const _kPaymentTypes = [
 
 const _kPaymentStatuses = [
   'Pending',
-  'Partial',
+  'Advance',
   'Completed',
   'Overdue',
 ];
@@ -132,11 +132,11 @@ const _kPaymentStatuses = [
 const _kReelCategories = [
   'Promotional Reel',
   'Wedding Reel',
-  'Social Media Reel',
-  'Advertisement Reel',
-  'Educational Reel',
-  'Music Video',
-  'Corporate Reel',
+  'New car Delivery Reel',
+  'Birthday Reel',
+  'Welcome Baby Reel',
+  'Home interior Video',
+  'Traditional Chhathi Reel',
   'Custom',
 ];
 
@@ -148,7 +148,7 @@ Color _paymentStatusColor(String s) {
   switch (s.toLowerCase()) {
     case 'completed':
       return BillifyColors.paid;
-    case 'partial':
+    case 'advance':
       return const Color(0xFF1976D2);
     case 'overdue':
       return BillifyColors.overdue;
@@ -161,7 +161,7 @@ Color _paymentStatusBg(String s) {
   switch (s.toLowerCase()) {
     case 'completed':
       return const Color(0xFFE8F5E9);
-    case 'partial':
+    case 'advance':
       return const Color(0xFFE3F2FD);
     case 'overdue':
       return const Color(0xFFFFF3E0);
@@ -174,7 +174,7 @@ IconData _paymentStatusIcon(String s) {
   switch (s.toLowerCase()) {
     case 'completed':
       return Icons.check_circle_rounded;
-    case 'partial':
+    case 'advance':
       return Icons.timelapse_rounded;
     case 'overdue':
       return Icons.warning_amber_rounded;
@@ -903,7 +903,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
             ),
             const SizedBox(height: 12),
             _buildField(
-              label: 'MOBILE NUMBER *',
+              label: 'MOBILE NUMBER',
               child: TextFormField(
                 controller: _mobileCtrl,
                 keyboardType: TextInputType.phone,
@@ -912,15 +912,12 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                   LengthLimitingTextInputFormatter(15),
                 ],
                 decoration: const InputDecoration(
-                  hintText: 'Enter mobile number',
+                  hintText: 'Enter mobile number (optional)',
                   prefixIcon: Icon(Icons.phone_rounded,
                       color: BillifyColors.primary, size: 18),
                 ),
                 validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'Mobile number is required';
-                  }
-                  if (v.trim().length < 7) {
+                  if (v != null && v.trim().isNotEmpty && v.trim().length < 7) {
                     return 'Enter a valid mobile number';
                   }
                   return null;

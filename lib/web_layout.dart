@@ -35,6 +35,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'main.dart' show BillifyColors, AppRoutes, BillifyDrawer;
 
+
+// Routes that should NOT show the desktop shell (auth / onboarding screens)
+const _kShelllessRoutes = {
+  AppRoutes.splash,
+  AppRoutes.login,
+  AppRoutes.register,
+  AppRoutes.forgotPassword,
+  AppRoutes.termsConditions,
+  AppRoutes.lock,
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,7 +59,8 @@ const double _kRailWidth = 260.0;
 
 class WebLayoutService extends GetxService {
   final RxString _mode        = ''.obs;
-  final RxString activeRoute  = AppRoutes.dashboard.obs;
+  // Start on splash so WebLayoutGate never shows the shell before login.
+  final RxString activeRoute  = AppRoutes.splash.obs;
 
   String get mode      => _mode.value;
   bool get isDesktop   => kIsWeb && _mode.value == 'desktop';
@@ -72,6 +84,15 @@ class WebLayoutService extends GetxService {
     _mode.value = '';
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kPrefKey);
+  }
+
+  /// Call after every navigation so the rail highlight and gate
+  /// react to the current screen correctly.
+  void syncRoute(String route) {
+    if (route.startsWith('/invoice')) { activeRoute.value = AppRoutes.invoices; return; }
+    if (route.startsWith('/expense')) { activeRoute.value = AppRoutes.expenses; return; }
+    if (route.startsWith('/client'))  { activeRoute.value = AppRoutes.clients;  return; }
+    activeRoute.value = route;
   }
 
   static WebLayoutService get to => Get.find<WebLayoutService>();
@@ -109,25 +130,26 @@ class DesktopNavCallback extends InheritedWidget {
 /// so it is never destroyed on route changes.
 ///
 /// Responsibilities:
-///   • On desktop-web: wraps [child] in [DesktopShell] (permanent rail).
+///   • On desktop-web: wraps [child] in [DesktopShell] (permanent rail),
+///     but ONLY for app routes. Auth/splash/terms screens bypass the shell.
 ///   • On mobile / Android / iOS: transparent passthrough.
-///
-/// The device-picker dialog is shown from SplashScreen (which IS inside
-/// the navigator) to avoid the "no Navigator ancestor" error.
 class WebLayoutGate extends StatelessWidget {
   final Widget child;
   const WebLayoutGate({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    // Reactively swap between desktop shell and plain child when mode changes
-    // (e.g. user changes layout from Settings).
     if (!kIsWeb) return child;
 
     return Obx(() {
-      final isDesktop = WebLayoutService.to.isDesktop;
-      if (isDesktop) return DesktopShell(child: child);
-      return child;
+      final svc       = WebLayoutService.to;
+      final isDesktop = svc.isDesktop;
+      final route     = svc.activeRoute.value;
+
+      // Auth / onboarding screens never show the permanent rail.
+      if (!isDesktop || _kShelllessRoutes.contains(route)) return child;
+
+      return DesktopShell(child: child);
     });
   }
 }
@@ -185,10 +207,9 @@ class DesktopShell extends StatelessWidget {
   /// Called by _NavItem / profile tap when inside the permanent rail.
   /// Uses Get.offAllNamed so route middleware still applies.
   void _handleNav(String route) {
-    // Set the active highlight immediately before navigation.
-    WebLayoutService.to.activeRoute.value = route;
-    // Navigate directly to the target route — no detour through dashboard.
-    // Route middleware (AuthMiddleware) still applies via GetX.
+    // Sync route: updates highlight AND hides shell on auth screens.
+    WebLayoutService.to.syncRoute(route);
+    // Navigate directly — AuthMiddleware still applies via GetX.
     Get.offAllNamed(route);
     // No Navigator.pop() — we are NOT inside a Flutter Drawer widget.
   }
@@ -279,9 +300,59 @@ class _DesktopAppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // On desktop the rail replaces the drawer/hamburger. Suppress the
+    // auto-inserted back button that Flutter adds when the GetX stack
+    // has more than one route (e.g. Dashboard → Invoices).
     return SizedBox(
       height: appBar.preferredSize.height,
-      child: appBar,
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          appBarTheme: Theme.of(context).appBarTheme.copyWith(
+            // Prevent Flutter from auto-inserting a back arrow.
+            // Screens that genuinely need a back button supply an
+            // explicit leading: widget — those are unaffected.
+          ),
+        ),
+        child: MediaQuery(
+          // Override the padding so the AppBar doesn't add extra top space.
+          data: MediaQuery.of(context).copyWith(padding: EdgeInsets.zero),
+          child: Builder(
+            builder: (ctx) {
+              // If the appBar is a standard AppBar and has no explicit
+              // leading set, force automaticallyImplyLeading off.
+              if (appBar is AppBar) {
+                final bar = appBar as AppBar;
+                if (bar.leading == null) {
+                  return AppBar(
+                    key: bar.key,
+                    automaticallyImplyLeading: false,
+                    backgroundColor: bar.backgroundColor,
+                    elevation: bar.elevation ?? 0,
+                    title: bar.title,
+                    actions: bar.actions,
+                    bottom: bar.bottom,
+                    titleSpacing: bar.titleSpacing,
+                    toolbarHeight: bar.toolbarHeight,
+                    foregroundColor: bar.foregroundColor,
+                    shadowColor: bar.shadowColor,
+                    surfaceTintColor: bar.surfaceTintColor,
+                    centerTitle: bar.centerTitle,
+                    titleTextStyle: bar.titleTextStyle,
+                    toolbarTextStyle: bar.toolbarTextStyle,
+                    iconTheme: bar.iconTheme,
+                    actionsIconTheme: bar.actionsIconTheme,
+                    shape: bar.shape,
+                    systemOverlayStyle: bar.systemOverlayStyle,
+                    scrolledUnderElevation: bar.scrolledUnderElevation,
+                    flexibleSpace: bar.flexibleSpace,
+                  );
+                }
+              }
+              return appBar;
+            },
+          ),
+        ),
+      ),
     );
   }
 }

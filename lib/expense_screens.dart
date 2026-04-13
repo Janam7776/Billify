@@ -60,6 +60,7 @@ class Expense {
   DateTime date;
   String note;
   String paymentMode;
+  String whoPaid;       // NEW: person/entity who made the payment
   bool isTaxable;
   double taxPercent;
 
@@ -72,6 +73,7 @@ class Expense {
     DateTime? date,
     this.note = '',
     this.paymentMode = 'UPI',
+    this.whoPaid = '',
     this.isTaxable = false,
     this.taxPercent = 18,
   }) : date = date ?? DateTime.now();
@@ -90,6 +92,7 @@ class Expense {
     'date': Timestamp.fromDate(date),
     'note': note,
     'paymentMode': paymentMode,
+    'whoPaid': whoPaid,
     'isTaxable': isTaxable,
     'taxPercent': taxPercent,
     'netAmount': netAmount,
@@ -105,6 +108,7 @@ class Expense {
     date: (m['date'] as Timestamp?)?.toDate() ?? DateTime.now(),
     note: (m['note'] ?? '') as String,
     paymentMode: (m['paymentMode'] ?? 'UPI') as String,
+    whoPaid: (m['whoPaid'] ?? '') as String,
     isTaxable: (m['isTaxable'] ?? false) as bool,
     taxPercent: ((m['taxPercent'] ?? 18) as num).toDouble(),
   );
@@ -534,6 +538,10 @@ class _ExpenseCard extends StatelessWidget {
             _Chip(label: entry.category, color: BillifyColors.primary),
             const SizedBox(width: 4),
             _Chip(label: entry.paymentMode, color: BillifyColors.textSecondary),
+            if (entry.whoPaid.isNotEmpty) ...[
+              const SizedBox(width: 4),
+              _Chip(label: entry.whoPaid, color: const Color(0xFF1976D2)),
+            ],
             const SizedBox(width: 4),
             Text(
               AppSettings.formatDate(entry.date).toUpperCase(),
@@ -660,6 +668,32 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final _titleCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
+  final _whoPaidCtrl = TextEditingController();
+
+  // Formats a raw digit string into comma-separated Indian numbering
+  // e.g. "150000" → "1,50,000"
+  static String _formatWithCommas(String raw) {
+    final digits = raw.replaceAll(',', '');
+    if (digits.isEmpty) return '';
+    // Split on decimal point
+    final parts = digits.split('.');
+    final intPart = parts[0];
+    final decPart = parts.length > 1 ? '.${parts[1]}' : '';
+    // Indian comma style: last 3 then every 2
+    if (intPart.length <= 3) return '$intPart$decPart';
+    final last3 = intPart.substring(intPart.length - 3);
+    final rest = intPart.substring(0, intPart.length - 3);
+    final commaRest = rest.replaceAllMapped(
+      RegExp(r'(\d{1,2})(?=(\d{2})+$)'),
+          (m) => '${m[1]},',
+    );
+    return '$commaRest,$last3$decPart';
+  }
+
+  // Strips commas and returns plain numeric string for parsing
+  static double _parseCommaAmount(String text) {
+    return double.tryParse(text.replaceAll(',', '')) ?? 0;
+  }
 
   @override
   void initState() {
@@ -672,8 +706,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       _entry = Expense();
     }
     _titleCtrl.text = _entry.title;
-    _amountCtrl.text = _entry.amount == 0 ? '' : _entry.amount.toString();
+    _amountCtrl.text = _entry.amount == 0
+        ? ''
+        : _formatWithCommas(_entry.amount.toStringAsFixed(0));
     _noteCtrl.text = _entry.note;
+    _whoPaidCtrl.text = _entry.whoPaid;
   }
 
   @override
@@ -681,13 +718,15 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     _titleCtrl.dispose();
     _amountCtrl.dispose();
     _noteCtrl.dispose();
+    _whoPaidCtrl.dispose();
     super.dispose();
   }
 
   void _sync() {
     _entry.title = _titleCtrl.text.trim();
-    _entry.amount = double.tryParse(_amountCtrl.text) ?? 0;
+    _entry.amount = _parseCommaAmount(_amountCtrl.text);
     _entry.note = _noteCtrl.text.trim();
+    _entry.whoPaid = _whoPaidCtrl.text.trim();
   }
 
   Future<void> _save() async {
@@ -901,9 +940,18 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           keyboardType:
           const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+            FilteringTextInputFormatter.allow(RegExp(r'[\d,.]')),
           ],
-          onChanged: (_) {},
+          onChanged: (raw) {
+            final plain = raw.replaceAll(',', '');
+            final formatted = _formatWithCommas(plain);
+            if (formatted != raw) {
+              _amountCtrl.value = TextEditingValue(
+                text: formatted,
+                selection: TextSelection.collapsed(offset: formatted.length),
+              );
+            }
+          },
           decoration: InputDecoration(
             labelText: 'Amount (₹) *',
             prefixIcon: const Icon(
@@ -997,6 +1045,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         _SectionLabel('Payment Mode'),
         const SizedBox(height: 8),
         _buildPaymentModeChips(context),
+        const SizedBox(height: 14),
+        _field(
+          ctrl: _whoPaidCtrl,
+          label: 'Who Paid',
+          icon: Icons.person_outline_rounded,
+          hint: 'e.g. Self, Company, John…',
+          onChanged: (_) {},
+        ),
       ],
     );
   }

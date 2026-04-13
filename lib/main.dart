@@ -24,6 +24,19 @@ import 'web_layout.dart' show WebLayoutService, WebLayoutGate, DesktopNavCallbac
 // ════════════════════════════════════════════════════════════
 //  MAIN ENTRY POINT
 // ════════════════════════════════════════════════════════════
+// ── Desktop-safe navigation helper ─────────────────────────────────────────
+/// Navigates to [route] and syncs the desktop rail / gate reactively.
+void _goTo(String route, {bool offAll = true}) {
+  if (kIsWeb && Get.isRegistered<WebLayoutService>()) {
+    WebLayoutService.to.syncRoute(route);
+  }
+  if (offAll) {
+    Get.offAllNamed(route);
+  } else {
+    Get.toNamed(route);
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -702,7 +715,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (user == null) {
       // Not logged in → Login (device picker shown after login succeeds)
-      Get.offAllNamed(AppRoutes.login);
+      _goTo(AppRoutes.login);
       return;
     }
 
@@ -726,16 +739,16 @@ class _SplashScreenState extends State<SplashScreen>
       final termsAccepted = doc.data()?['termsAccepted'] ?? false;
 
       if (termsAccepted) {
-        Get.offAllNamed(AppRoutes.dashboard);
+        _goTo(AppRoutes.dashboard);
         // Trigger lock check on cold launch (after reaching dashboard)
         if (Get.isRegistered<SettingsController>()) {
           SettingsController.to.onForeground();
         }
       } else {
-        Get.offAllNamed(AppRoutes.termsConditions);
+        _goTo(AppRoutes.termsConditions);
       }
     } catch (_) {
-      Get.offAllNamed(AppRoutes.login);
+      _goTo(AppRoutes.login);
     }
   }
 
@@ -1346,7 +1359,7 @@ class _BillifyDrawerState extends State<BillifyDrawer>
         confirmColor: BillifyColors.unpaid,
         onConfirm: () async {
           await FirebaseAuth.instance.signOut();
-          Get.offAllNamed(AppRoutes.login);
+          _goTo(AppRoutes.login);
         },
       ),
     );
@@ -1419,7 +1432,7 @@ class _BillifyDrawerState extends State<BillifyDrawer>
                             final cb = DesktopNavCallback.maybeOf(context);
                             if (cb != null) { cb.navigate(AppRoutes.profile); return; }
                             Navigator.of(context).pop();
-                            Get.offAllNamed(AppRoutes.dashboard);
+                            _goTo(AppRoutes.dashboard);
                             Get.toNamed(AppRoutes.profile);
                           },
                         );
@@ -1445,7 +1458,7 @@ class _BillifyDrawerState extends State<BillifyDrawer>
                             final cb = DesktopNavCallback.maybeOf(context);
                             if (cb != null) { cb.navigate(AppRoutes.profile); return; }
                             Navigator.of(context).pop();
-                            Get.offAllNamed(AppRoutes.dashboard);
+                            _goTo(AppRoutes.dashboard);
                             Get.toNamed(AppRoutes.profile);
                           },
                           child: Container(
@@ -1786,9 +1799,9 @@ class _NavItem extends StatelessWidget {
           Navigator.of(context).pop();
           if (isActive) return;
           if (route == AppRoutes.dashboard) {
-            Get.offAllNamed(AppRoutes.dashboard);
+            _goTo(AppRoutes.dashboard);
           } else {
-            Get.offAllNamed(AppRoutes.dashboard);
+            _goTo(AppRoutes.dashboard);
             Get.toNamed(route);
           }
         },
@@ -1862,7 +1875,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final termsAccepted = doc.data()?['termsAccepted'] ?? false;
-      Get.offAllNamed(termsAccepted ? AppRoutes.dashboard : AppRoutes.termsConditions);
+      _goTo(termsAccepted ? AppRoutes.dashboard : AppRoutes.termsConditions);
     } on FirebaseAuthException catch (e) {
       Get.snackbar('Login Failed', e.message ?? 'An error occurred',
           backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
@@ -2121,7 +2134,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'createdAt':        FieldValue.serverTimestamp(),
       });
 
-      Get.offAllNamed(AppRoutes.termsConditions);
+      _goTo(AppRoutes.termsConditions);
     } on FirebaseAuthException catch (e) {
       Get.snackbar('Registration Failed', e.message ?? 'An error occurred',
           backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
@@ -2324,7 +2337,7 @@ class _TermsConditionsScreenState extends State<TermsConditionsScreen> {
           await svc.setMode(choice);
         }
       }
-      Get.offAllNamed(AppRoutes.dashboard);
+      _goTo(AppRoutes.dashboard);
     } catch (e) {
       Get.snackbar('Error', 'Could not save acceptance. Please try again.',
           backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
@@ -3742,6 +3755,7 @@ class SettingsController extends GetxController {
     await Future.delayed(const Duration(milliseconds: 150));
 
     if (isLocked.value && Get.currentRoute != AppRoutes.lock) {
+      if (kIsWeb && Get.isRegistered<WebLayoutService>()) WebLayoutService.to.syncRoute(AppRoutes.lock);
       await Get.toNamed(AppRoutes.lock);
     }
     _isNavigatingToLock = false;
@@ -4092,7 +4106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await FirebaseAuth.instance.currentUser?.delete();
       final p = await SharedPreferences.getInstance();
       await p.clear();
-      Get.offAllNamed(AppRoutes.login);
+      _goTo(AppRoutes.login);
     } catch (e) {
       Get.snackbar('Error',
           'Could not delete account. Please re-login and try again.',

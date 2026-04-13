@@ -30,6 +30,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'main.dart' show BillifyColors, AppRoutes, BillifyDrawer, AppSettings, BillifyC,
 BillifyDialog, BillifyImageSourceSheet;
 import 'dashboard_screen.dart' show invoiceStatusColor, invoiceStatusBg, showStatusPicker;
+import 'web_layout.dart' show WebScaffold, WebLayoutService;
 
 // ════════════════════════════════════════════════════════════
 //  HELPERS
@@ -48,12 +49,42 @@ String _invoiceId()  => _randomId(AppSettings.invoicePrefix);
 String _orderId()    => _randomId(AppSettings.orderPrefix);
 
 // ════════════════════════════════════════════════════════════
+//  SERVICE CATEGORY CONSTANTS  (mirrors client_screens)
+// ════════════════════════════════════════════════════════════
+
+const _kServiceClientCategories = [
+  'Mobile Shoot',
+  'Camera Shoot',
+  'Studio Shoot',
+  'Outdoor Shoot',
+  'Event Coverage',
+  'Portrait Session',
+  'Product Shoot',
+  'Custom',
+];
+
+const _kServiceReelCategories = [
+  'Promotional Reel',
+  'Wedding Reel',
+  'Social Media Reel',
+  'Advertisement Reel',
+  'Educational Reel',
+  'Music Video',
+  'Corporate Reel',
+  'Custom',
+];
+
+// ════════════════════════════════════════════════════════════
 //  DATA MODEL
 // ════════════════════════════════════════════════════════════
 
 /// A single line-item on a content creation invoice.
 class ContentItem {
-  String  title;
+  String  title;               // kept for backward-compat / PDF fallback
+  String  clientCategory;      // e.g. 'Mobile Shoot'
+  String  reelCategory;        // e.g. 'Promotional Reel'
+  String  customClientCategory;
+  String  customReelCategory;
   bool    hasQty;
   int     qty;
   double  grossAmount;
@@ -65,7 +96,11 @@ class ContentItem {
   double  igstPercent;     // e.g. 18 for 18 %
 
   ContentItem({
-    this.title       = '',
+    this.title                = '',
+    this.clientCategory       = 'Mobile Shoot',
+    this.reelCategory         = 'Promotional Reel',
+    this.customClientCategory = '',
+    this.customReelCategory   = '',
     this.hasQty      = false,
     this.qty         = 1,
     this.grossAmount = 0,
@@ -78,20 +113,51 @@ class ContentItem {
   }) : taxPercent  = taxPercent  ?? AppSettings.defaultGst,
         igstPercent = igstPercent ?? AppSettings.defaultGst;
 
-  /// Net = grossAmount − discount
-  double get net => (grossAmount - discount).clamp(0, double.infinity);
+  /// Resolved display category (handles 'Custom')
+  String get displayClientCategory =>
+      clientCategory == 'Custom' ? customClientCategory : clientCategory;
 
-  /// Tax amount on the net
-  double get taxAmount => hasTax ? net * taxPercent / 100 : 0;
+  /// Resolved display reel category (handles 'Custom')
+  String get displayReelCategory =>
+      reelCategory == 'Custom' ? customReelCategory : reelCategory;
 
-  /// IGST amount on the net
-  double get igstAmount => hasIgst ? net * igstPercent / 100 : 0;
+  /// Full service name: "ClientCategory - ReelCategory"
+  String get serviceTitle {
+    final c = displayClientCategory;
+    final r = displayReelCategory;
+    if (c.isNotEmpty && r.isNotEmpty) return '$c - $r';
+    if (c.isNotEmpty) return c;
+    if (r.isNotEmpty) return r;
+    return title.isNotEmpty ? title : 'Service';
+  }
 
-  /// Final line total
-  double get lineTotal => net * (hasQty ? qty : 1) + taxAmount + igstAmount;
+  /// Effective quantity (1 when qty toggle is off)
+  int get effectiveQty => hasQty ? qty.clamp(1, 999999) : 1;
+
+  /// Net unit price after discount
+  double get netUnit => (grossAmount - (hasDiscount ? discount : 0)).clamp(0, double.infinity);
+
+  /// Net amount scaled by quantity
+  double get netAmount => netUnit * effectiveQty;
+
+  /// GST/Tax applied on netAmount
+  double get taxAmount => hasTax ? netAmount * taxPercent / 100 : 0;
+
+  /// IGST applied on netAmount
+  double get igstAmount => hasIgst ? netAmount * igstPercent / 100 : 0;
+
+  /// Final line total = netAmount + tax + igst
+  double get lineTotal => netAmount + taxAmount + igstAmount;
+
+  // Legacy alias kept for subTotal calculation in Invoice
+  double get net => netUnit;
 
   Map<String, dynamic> toMap() => {
-    'title':       title,
+    'title':                title,
+    'clientCategory':       clientCategory,
+    'reelCategory':         reelCategory,
+    'customClientCategory': customClientCategory,
+    'customReelCategory':   customReelCategory,
     'hasQty':      hasQty,
     'qty':         qty,
     'grossAmount': grossAmount,
@@ -104,7 +170,11 @@ class ContentItem {
   };
 
   factory ContentItem.fromMap(Map<String, dynamic> m) => ContentItem(
-    title:       m['title']       ?? '',
+    title:                m['title']                ?? '',
+    clientCategory:       m['clientCategory']       ?? 'Mobile Shoot',
+    reelCategory:         m['reelCategory']         ?? 'Promotional Reel',
+    customClientCategory: m['customClientCategory'] ?? '',
+    customReelCategory:   m['customReelCategory']   ?? '',
     hasQty:      m['hasQty']      ?? false,
     qty:         ((m['qty']        ?? 1) as num).toInt(),
     grossAmount: ((m['grossAmount']?? 0) as num).toDouble(),
@@ -142,10 +212,8 @@ class Invoice {
   String   companyAddress;
   String   companyPhone;
   String   companyEmail;
-  String   bankName;
-  String   accountName;
-  String   accountNumber;
-  String   ifscCode;
+  String   upiId;          // UPI payment ID
+  String   upiQrBase64;    // base64 QR image uploaded by user
   String   logoPath;        // local file path (legacy)
   String   logoBase64;      // base64 from SharedPreferences (preferred)
 
@@ -168,10 +236,8 @@ class Invoice {
     this.companyAddress  = '',
     this.companyPhone    = '',
     this.companyEmail    = '',
-    this.bankName        = '',
-    this.accountName     = '',
-    this.accountNumber   = '',
-    this.ifscCode        = '',
+    this.upiId           = '',
+    this.upiQrBase64     = '',
     this.logoPath        = '',
     this.logoBase64      = '',
   })  : invoiceNumber = invoiceNumber ?? _invoiceId(),
@@ -179,7 +245,7 @@ class Invoice {
         orderDate     = orderDate     ?? DateTime.now(),
         items         = items         ?? [ContentItem()];
 
-  double get subTotal    => items.fold(0, (s, i) => s + i.net * (i.hasQty ? i.qty : 1));
+  double get subTotal    => items.fold(0, (s, i) => s + i.netAmount);
   double get totalTax    => items.fold(0, (s, i) => s + i.taxAmount);
   double get totalIgst   => items.fold(0, (s, i) => s + i.igstAmount);
   double get totalAmount => subTotal + totalTax + totalIgst;
@@ -202,10 +268,8 @@ class Invoice {
     'companyAddress':  companyAddress,
     'companyPhone':    companyPhone,
     'companyEmail':    companyEmail,
-    'bankName':        bankName,
-    'accountName':     accountName,
-    'accountNumber':   accountNumber,
-    'ifscCode':        ifscCode,
+    'upiId':           upiId,
+    'upiQrBase64':     upiQrBase64,
     'logoPath':        logoPath,
     'logoBase64':      logoBase64,
     'totalAmount':     totalAmount,
@@ -233,10 +297,8 @@ class Invoice {
       companyAddress:  m['companyAddress']  ?? '',
       companyPhone:    m['companyPhone']    ?? '',
       companyEmail:    m['companyEmail']    ?? '',
-      bankName:        m['bankName']        ?? '',
-      accountName:     m['accountName']     ?? '',
-      accountNumber:   m['accountNumber']   ?? '',
-      ifscCode:        m['ifscCode']        ?? '',
+      upiId:           m['upiId']           ?? '',
+      upiQrBase64:     m['upiQrBase64']     ?? '',
       logoPath:        m['logoPath']        ?? '',
       logoBase64:      m['logoBase64']      ?? '',
     );
@@ -286,7 +348,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
       } else if (_filterStatus == 'paid_only') {
         matchStatus = inv.status == 'paid';
       } else if (_filterStatus == 'pending_only') {
-        matchStatus = inv.status == 'unpaid' || inv.status == 'overdue';
+        matchStatus = inv.status == 'unpaid' || inv.status == 'advance';
       } else {
         matchStatus = inv.status == _filterStatus;
       }
@@ -303,7 +365,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     switch (s) {
       case 'paid':    return BillifyColors.paid;
       case 'unpaid':  return BillifyColors.unpaid;
-      case 'overdue': return BillifyColors.overdue;
+      case 'advance': return const Color(0xFF6A5ACD);
       default:        return BillifyColors.draft;
     }
   }
@@ -312,9 +374,9 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
   Widget build(BuildContext context) {
     final fmt = AppSettings.currencyFmt();
 
-    return Scaffold(
+    return WebScaffold(
+      activeRoute: AppRoutes.invoices,
       backgroundColor: BillifyColors.background,
-      drawer: const BillifyDrawer(activeRoute: AppRoutes.invoices),
       appBar: _buildAppBar(),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Get.toNamed(AppRoutes.invoiceCreate),
@@ -429,7 +491,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
         color: BillifyColors.surfaceContainer,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Row(
-          children: ['all', 'draft', 'unpaid', 'paid', 'overdue'].map((s) {
+          children: ['all', 'draft', 'unpaid', 'paid', 'advance'].map((s) {
             final active = _filterStatus == s;
             return GestureDetector(
               onTap: () => setState(() => _filterStatus = s),
@@ -614,7 +676,7 @@ class _InvoiceListTile extends StatelessWidget {
     switch (s) {
       case 'paid':    return BillifyColors.paid;
       case 'unpaid':  return BillifyColors.unpaid;
-      case 'overdue': return BillifyColors.overdue;
+      case 'advance': return const Color(0xFF6A5ACD);
       default:        return BillifyColors.draft;
     }
   }
@@ -674,10 +736,8 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
       final email    = sp('profile_email').isNotEmpty
           ? sp('profile_email')
           : (FirebaseAuth.instance.currentUser?.email ?? '');
-      final bankName = sp('profile_bankName');
-      final accName  = sp('profile_accountName');
-      final accNum   = sp('profile_accountNumber');
-      final ifsc     = sp('profile_ifscCode');
+      final upiId    = sp('profile_upiId');
+      final upiQr    = sp('profile_upiQrBase64');
       final terms    = sp('profile_termsConditions');
       final tyNote   = sp('profile_thankYouNote');
 
@@ -708,10 +768,8 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
       inv.pan            = pf(pan,     'panNumber');
       inv.logoBase64     = logo64;
 
-      inv.bankName      = pf(bankName, 'bankName');
-      inv.accountName   = pf(accName,  'accountName');
-      inv.accountNumber = pf(accNum,   'accountNumber');
-      inv.ifscCode      = pf(ifsc,     'ifscCode');
+      inv.upiId         = pf(upiId, 'upiId');
+      if (upiQr.isNotEmpty) inv.upiQrBase64 = upiQr;
 
       if (terms.isNotEmpty)  inv.termsConditions = terms;
       if (tyNote.isNotEmpty) inv.thankYouNote    = tyNote;
@@ -721,7 +779,7 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
       final anyPrefilled = inv.companyName.isNotEmpty  ||
           inv.companyPhone.isNotEmpty ||
           inv.gstNumber.isNotEmpty    ||
-          inv.bankName.isNotEmpty     ||
+          inv.upiId.isNotEmpty        ||
           inv.logoBase64.isNotEmpty;
 
       setState(() {
@@ -744,13 +802,18 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
       if (inv.id.isEmpty) {
         final doc = await col.add(inv.toMap());
         inv.id = doc.id;
+        // Redirect to invoice preview after creation
+        Get.offNamed(AppRoutes.invoiceDetail, arguments: inv);
+        Get.snackbar('Created ✓', 'Invoice created successfully',
+            backgroundColor: BillifyColors.paid, colorText: Colors.white,
+            snackPosition: SnackPosition.TOP);
       } else {
         await col.doc(inv.id).update(inv.toMap());
+        Get.back();
+        Get.snackbar('Saved ✓', 'Invoice saved successfully',
+            backgroundColor: BillifyColors.paid, colorText: Colors.white,
+            snackPosition: SnackPosition.TOP);
       }
-      Get.back();
-      Get.snackbar('Saved ✓', 'Invoice saved successfully',
-          backgroundColor: BillifyColors.paid, colorText: Colors.white,
-          snackPosition: SnackPosition.TOP);
     } catch (e) {
       Get.snackbar('Error', e.toString(),
           backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
@@ -1172,7 +1235,7 @@ class _DetailsStepState extends State<_DetailsStep> {
                 base64Decode(widget.inv.logoBase64),
                 fit: BoxFit.cover,
               )
-                  : widget.inv.logoPath.isNotEmpty
+                  : widget.inv.logoPath.isNotEmpty && !kIsWeb
                   ? Image.file(
                 File(widget.inv.logoPath),
                 fit: BoxFit.cover,
@@ -1246,10 +1309,7 @@ class _ItemsStep extends StatefulWidget {
 }
 
 class _ItemsStepState extends State<_ItemsStep> {
-  late final _bankCtrl    = TextEditingController(text: widget.inv.bankName);
-  late final _accNameCtrl = TextEditingController(text: widget.inv.accountName);
-  late final _accNumCtrl  = TextEditingController(text: widget.inv.accountNumber);
-  late final _ifscCtrl    = TextEditingController(text: widget.inv.ifscCode);
+  late final _upiCtrl     = TextEditingController(text: widget.inv.upiId);
   late final _termsCtrl   = TextEditingController(text: widget.inv.termsConditions);
   late final _tyCtrl      = TextEditingController(text: widget.inv.thankYouNote);
   String _status          = '';
@@ -1258,10 +1318,7 @@ class _ItemsStepState extends State<_ItemsStep> {
   void initState() { super.initState(); _status = widget.inv.status; }
 
   void _syncPayment() {
-    widget.inv.bankName      = _bankCtrl.text;
-    widget.inv.accountName   = _accNameCtrl.text;
-    widget.inv.accountNumber = _accNumCtrl.text;
-    widget.inv.ifscCode      = _ifscCtrl.text;
+    widget.inv.upiId         = _upiCtrl.text;
     widget.inv.termsConditions = _termsCtrl.text;
     widget.inv.thankYouNote  = _tyCtrl.text;
     widget.onChanged();
@@ -1271,7 +1328,7 @@ class _ItemsStepState extends State<_ItemsStep> {
     switch (s) {
       case 'paid':    return BillifyColors.paid;
       case 'unpaid':  return BillifyColors.unpaid;
-      case 'overdue': return BillifyColors.overdue;
+      case 'advance': return const Color(0xFF6A5ACD);
       default:        return BillifyColors.draft;
     }
   }
@@ -1322,17 +1379,10 @@ class _ItemsStepState extends State<_ItemsStep> {
         _buildStatusChips(context, inv),
         const SizedBox(height: 20),
         _SectionTitle('Payment Information'),
-        _field2(_bankCtrl, 'Bank Name', Icons.account_balance_rounded,
+        _field2(_upiCtrl, 'UPI ID', Icons.qr_code_rounded,
                 (v) => _syncPayment()),
         const SizedBox(height: 10),
-        _field2(_accNameCtrl, 'Account Name', Icons.person_rounded,
-                (v) => _syncPayment()),
-        const SizedBox(height: 10),
-        _field2(_accNumCtrl, 'Account No.', Icons.credit_card_rounded,
-                (v) => _syncPayment()),
-        const SizedBox(height: 10),
-        _field2(_ifscCtrl, 'IFSC Code', Icons.code_rounded,
-                (v) => _syncPayment()),
+        _buildUpiQrPicker(context),
         const SizedBox(height: 20),
         _SectionTitle('Terms & Note'),
         TextField(
@@ -1353,6 +1403,88 @@ class _ItemsStepState extends State<_ItemsStep> {
                 (v) => _syncPayment()),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+
+  Future<void> _pickUpiQr() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+        source: ImageSource.gallery, maxWidth: 512, maxHeight: 512, imageQuality: 90);
+    if (picked != null) {
+      final bytes = await picked.readAsBytes();
+      setState(() {
+        widget.inv.upiQrBase64 = base64Encode(bytes);
+      });
+      widget.onChanged();
+    }
+  }
+
+  Widget _buildUpiQrPicker(BuildContext context) {
+    final hasQr = widget.inv.upiQrBase64.isNotEmpty;
+    return GestureDetector(
+      onTap: _pickUpiQr,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(
+            color: hasQr ? BillifyColors.primary : BillifyColors.divider,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: BillifyColors.primary.withOpacity(0.07),
+                borderRadius: BorderRadius.zero,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: hasQr
+                  ? Image.memory(base64Decode(widget.inv.upiQrBase64), fit: BoxFit.cover)
+                  : const Icon(Icons.qr_code_2_rounded, color: BillifyColors.primary, size: 28),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    hasQr ? 'UPI QR uploaded ✓' : 'Add UPI QR Code',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: hasQr ? BillifyColors.primary : BillifyColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    'Tap to choose QR image from gallery',
+                    style: GoogleFonts.nunito(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (hasQr)
+              IconButton(
+                icon: const Icon(Icons.close_rounded, color: BillifyColors.unpaid, size: 20),
+                onPressed: () {
+                  setState(() => widget.inv.upiQrBase64 = '');
+                  widget.onChanged();
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1383,7 +1515,7 @@ class _ItemsStepState extends State<_ItemsStep> {
   Widget _buildStatusChips(BuildContext context, Invoice inv) {
     return Wrap(
       spacing: 8,
-      children: ['draft', 'unpaid', 'paid', 'overdue'].map((s) {
+      children: ['draft', 'unpaid', 'paid', 'advance'].map((s) {
         final active = _status == s;
         return GestureDetector(
           onTap: () {
@@ -1437,16 +1569,29 @@ class _ContentItemRow extends StatefulWidget {
 }
 
 class _ContentItemRowState extends State<_ContentItemRow> {
-  late final _titleCtrl = TextEditingController(text: widget.item.title);
   late final _qtyCtrl   = TextEditingController(text: widget.item.qty.toString());
   late final _grossCtrl = TextEditingController(text: widget.item.grossAmount == 0 ? '' : widget.item.grossAmount.toString());
   late final _discCtrl  = TextEditingController(text: widget.item.discount == 0 ? '' : widget.item.discount.toString());
   late final _taxCtrl   = TextEditingController(text: widget.item.taxPercent.toString());
   late final _igstCtrl  = TextEditingController(text: widget.item.igstPercent.toString());
+  late final _customClientCtrl = TextEditingController(text: widget.item.customClientCategory);
+  late final _customReelCtrl   = TextEditingController(text: widget.item.customReelCategory);
 
   void _changed() {
     widget.onChanged();
     setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _qtyCtrl.dispose();
+    _grossCtrl.dispose();
+    _discCtrl.dispose();
+    _taxCtrl.dispose();
+    _igstCtrl.dispose();
+    _customClientCtrl.dispose();
+    _customReelCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -1573,83 +1718,114 @@ class _ContentItemRowState extends State<_ContentItemRow> {
   }
 
   Widget _buildTitleRow(BuildContext context, ContentItem item) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(
-            color: BillifyColors.primary,
-            borderRadius: BorderRadius.zero,
-          ),
-          child: Center(
-            child: Text(
-              '${widget.index + 1}',
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+        // ── Row header with index badge + delete ──
+        Row(
+          children: [
+            Container(
+              width: 26, height: 26,
+              decoration: const BoxDecoration(color: BillifyColors.primary),
+              child: Center(
+                child: Text(
+                  '${widget.index + 1}',
+                  style: GoogleFonts.poppins(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                item.serviceTitle,
+                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: BillifyColors.primary),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (widget.onDelete != null)
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, color: BillifyColors.unpaid, size: 20),
+                onPressed: widget.onDelete,
+                padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+              ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            controller: _titleCtrl,
+        const SizedBox(height: 10),
+
+        // ── Client Category dropdown ──
+        _ServiceDropdownLabel('CLIENT CATEGORY'),
+        const SizedBox(height: 6),
+        _ServiceDropdown(
+          value: item.clientCategory,
+          items: _kServiceClientCategories,
+          icon: Icons.category_rounded,
+          onChanged: (v) {
+            item.clientCategory = v!;
+            item.title = item.serviceTitle;
+            _changed();
+          },
+        ),
+        if (item.clientCategory == 'Custom') ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: _customClientCtrl,
+            textCapitalization: TextCapitalization.words,
             onChanged: (v) {
-              item.title = v;
+              item.customClientCategory = v;
+              item.title = item.serviceTitle;
               _changed();
             },
             decoration: InputDecoration(
-              hintText: 'Service title (e.g. Reel Shoot — 2hrs)',
-              hintStyle: GoogleFonts.nunito(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: BorderSide(
-                  color: Theme.of(context).dividerColor,
-                  width: 1.5,
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: BorderSide(
-                  color: Theme.of(context).dividerColor,
-                  width: 1.5,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide:
-                const BorderSide(color: BillifyColors.primary, width: 2),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
-              filled: true,
-              fillColor: Theme.of(context).scaffoldBackgroundColor,
+              hintText: 'Enter custom category name',
+              prefixIcon: const Icon(Icons.edit_rounded, color: BillifyColors.primary, size: 16),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              isDense: true,
+              border: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
+              focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.primary, width: 2)),
+              filled: true, fillColor: Theme.of(context).scaffoldBackgroundColor,
             ),
-            style: GoogleFonts.nunito(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
+            style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600),
           ),
+        ],
+        const SizedBox(height: 10),
+
+        // ── Reel Category dropdown ──
+        _ServiceDropdownLabel('REEL CATEGORY'),
+        const SizedBox(height: 6),
+        _ServiceDropdown(
+          value: item.reelCategory,
+          items: _kServiceReelCategories,
+          icon: Icons.video_library_rounded,
+          onChanged: (v) {
+            item.reelCategory = v!;
+            item.title = item.serviceTitle;
+            _changed();
+          },
         ),
-        if (widget.onDelete != null)
-          IconButton(
-            icon: const Icon(
-              Icons.delete_outline_rounded,
-              color: BillifyColors.unpaid,
-              size: 20,
+        if (item.reelCategory == 'Custom') ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: _customReelCtrl,
+            textCapitalization: TextCapitalization.words,
+            onChanged: (v) {
+              item.customReelCategory = v;
+              item.title = item.serviceTitle;
+              _changed();
+            },
+            decoration: InputDecoration(
+              hintText: 'Enter custom reel category',
+              prefixIcon: const Icon(Icons.edit_rounded, color: BillifyColors.primary, size: 16),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              isDense: true,
+              border: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
+              focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.primary, width: 2)),
+              filled: true, fillColor: Theme.of(context).scaffoldBackgroundColor,
             ),
-            onPressed: widget.onDelete,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+            style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600),
           ),
+        ],
       ],
     );
   }
@@ -1694,6 +1870,56 @@ class _ContentItemRowState extends State<_ContentItemRow> {
         ),
         style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
       );
+}
+
+// ── Service Dropdown helpers (mirrors client_screens _DropdownField) ──────────
+
+class _ServiceDropdownLabel extends StatelessWidget {
+  final String text;
+  const _ServiceDropdownLabel(this.text);
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: GoogleFonts.poppins(
+      fontSize: 9, fontWeight: FontWeight.w800,
+      letterSpacing: 1.2, color: BillifyColors.textSecondary,
+    ),
+  );
+}
+
+class _ServiceDropdown extends StatelessWidget {
+  final String value;
+  final List<String> items;
+  final IconData icon;
+  final ValueChanged<String?> onChanged;
+  const _ServiceDropdown({
+    required this.value,
+    required this.items,
+    required this.icon,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        prefixIcon: Icon(icon, color: BillifyColors.primary, size: 18),
+      ),
+      icon: const Icon(Icons.expand_more_rounded,
+          color: BillifyColors.textSecondary, size: 18),
+      style: GoogleFonts.nunito(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: BillifyColors.textPrimary),
+      dropdownColor: BillifyColors.surface,
+      items: items
+          .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+          .toList(),
+      onChanged: onChanged,
+    );
+  }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1961,7 +2187,7 @@ Future<List<int>> _buildPdf(Invoice inv) async {
     try {
       logoImg = pw.MemoryImage(base64Decode(inv.logoBase64));
     } catch (_) { logoImg = null; }
-  } else if (inv.logoPath.isNotEmpty) {
+  } else if (inv.logoPath.isNotEmpty && !kIsWeb) {
     try {
       final bytes = await File(inv.logoPath).readAsBytes();
       logoImg = pw.MemoryImage(bytes);
@@ -2107,7 +2333,7 @@ Future<List<int>> _buildPdf(Invoice inv) async {
                   decoration: pw.BoxDecoration(color: rowBg),
                   children: [
                     pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-                        child: pw.Text(item.title.isEmpty ? 'Item ${e.key + 1}' : item.title, style: ts(9))),
+                        child: pw.Text(item.serviceTitle.isEmpty ? 'Item ${e.key + 1}' : item.serviceTitle, style: ts(9))),
                     pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                         child: pw.Text(item.hasQty ? '${item.qty}' : '—', style: ts(9))),
                     pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
@@ -2185,10 +2411,11 @@ Future<List<int>> _buildPdf(Invoice inv) async {
                 children: [
                   pw.Text('Payment Information', style: tsb(10)),
                   pw.SizedBox(height: 4),
-                  if (inv.bankName.isNotEmpty)      pw.Text(inv.bankName,                              style: ts(9, color: grey600)),
-                  if (inv.accountName.isNotEmpty)   pw.Text('Name: ${inv.accountName}',                style: ts(9, color: grey600)),
-                  if (inv.accountNumber.isNotEmpty) pw.Text('A/C: ${inv.accountNumber}',               style: ts(9, color: grey600)),
-                  if (inv.ifscCode.isNotEmpty)      pw.Text('IFSC: ${inv.ifscCode}',                   style: ts(9, color: grey600)),
+                  if (inv.upiId.isNotEmpty) pw.Text('UPI: ${inv.upiId}', style: ts(9, color: grey600)),
+                  if (inv.upiQrBase64.isNotEmpty) ...[
+                    pw.SizedBox(height: 4),
+                    pw.Image(pw.MemoryImage(base64Decode(inv.upiQrBase64)), width: 72, height: 72),
+                  ],
                 ],
               ),
             ],
@@ -2258,10 +2485,12 @@ class _InvoicePreview extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Logo
-                    if (inv.logoPath.isNotEmpty) ...[
+                    if (inv.logoBase64.isNotEmpty || (!kIsWeb && inv.logoPath.isNotEmpty)) ...[
                       ClipRRect(
                         borderRadius: BorderRadius.zero,
-                        child: Image.file(File(inv.logoPath), width: 64, height: 64, fit: BoxFit.cover),
+                        child: inv.logoBase64.isNotEmpty
+                            ? Image.memory(base64Decode(inv.logoBase64), width: 64, height: 64, fit: BoxFit.cover)
+                            : Image.file(File(inv.logoPath), width: 64, height: 64, fit: BoxFit.cover),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -2363,7 +2592,7 @@ class _InvoicePreview extends StatelessWidget {
                     border: const Border(bottom: BorderSide(color: Color(0xFFEEEEEE))),
                   ),
                   children: [
-                    _cell(item.title.isEmpty ? 'Item ${e.key + 1}' : item.title),
+                    _cell(item.serviceTitle.isEmpty ? 'Item ${e.key + 1}' : item.serviceTitle),
                     _cell(item.hasQty ? '${item.qty}' : '—'),
                     _cell(fmt.format(item.grossAmount)),
                     _cell(item.hasDiscount && item.discount > 0 ? fmt.format(item.discount) : '—'),
@@ -2433,10 +2662,11 @@ class _InvoicePreview extends StatelessWidget {
                 children: [
                   Text('Payment Information', style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  if (inv.bankName.isNotEmpty)      Text(inv.bankName,                              style: GoogleFonts.nunito(fontSize: 9, color: Colors.black54)),
-                  if (inv.accountName.isNotEmpty)   Text('Name: ${inv.accountName}',               style: GoogleFonts.nunito(fontSize: 9, color: Colors.black54)),
-                  if (inv.accountNumber.isNotEmpty) Text('A/C: ${inv.accountNumber}',              style: GoogleFonts.nunito(fontSize: 9, color: Colors.black54)),
-                  if (inv.ifscCode.isNotEmpty)      Text('IFSC: ${inv.ifscCode}',                  style: GoogleFonts.nunito(fontSize: 9, color: Colors.black54)),
+                  if (inv.upiId.isNotEmpty) Text('UPI: ${inv.upiId}', style: GoogleFonts.nunito(fontSize: 9, color: Colors.black54)),
+                  if (inv.upiQrBase64.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Image.memory(base64Decode(inv.upiQrBase64), width: 64, height: 64, fit: BoxFit.contain),
+                  ],
                 ],
               ),
             ],
@@ -2530,7 +2760,7 @@ class _StatusBanner extends StatelessWidget {
     switch (status) {
       case 'paid':    return const Color(0xFFE8F5E9);
       case 'unpaid':  return const Color(0xFFFFEBEE);
-      case 'overdue': return const Color(0xFFFFF3E0);
+      case 'advance': return const Color(0xFFEDE7F6);
       default:        return const Color(0xFFF5F5F5);
     }
   }
@@ -2538,7 +2768,7 @@ class _StatusBanner extends StatelessWidget {
     switch (status) {
       case 'paid':    return BillifyColors.paid;
       case 'unpaid':  return BillifyColors.unpaid;
-      case 'overdue': return BillifyColors.overdue;
+      case 'advance': return const Color(0xFF6A5ACD);
       default:        return BillifyColors.draft;
     }
   }
@@ -2546,7 +2776,7 @@ class _StatusBanner extends StatelessWidget {
     switch (status) {
       case 'paid':    return Icons.check_circle_rounded;
       case 'unpaid':  return Icons.schedule_rounded;
-      case 'overdue': return Icons.warning_rounded;
+      case 'advance': return Icons.payments_rounded;
       default:        return Icons.edit_rounded;
     }
   }
@@ -2592,7 +2822,7 @@ class _StatusBadge extends StatelessWidget {
     switch (status) {
       case 'paid':    return BillifyColors.paid;
       case 'unpaid':  return BillifyColors.unpaid;
-      case 'overdue': return BillifyColors.overdue;
+      case 'advance': return const Color(0xFF6A5ACD);
       default:        return BillifyColors.draft;
     }
   }
@@ -2600,7 +2830,7 @@ class _StatusBadge extends StatelessWidget {
     switch (status) {
       case 'paid':    return const Color(0xFFE8F5E9);
       case 'unpaid':  return const Color(0xFFFFEBEE);
-      case 'overdue': return const Color(0xFFFFF3E0);
+      case 'advance': return const Color(0xFFEDE7F6);
       default:        return const Color(0xFFF5F5F5);
     }
   }
@@ -2654,5 +2884,6 @@ class _TotalRow extends StatelessWidget {
         )),
       ],
     ),
+
   );
 }
