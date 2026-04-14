@@ -31,6 +31,7 @@ import 'main.dart' show BillifyColors, AppRoutes, BillifyDrawer, AppSettings, Bi
 BillifyDialog, BillifyImageSourceSheet;
 import 'dashboard_screen.dart' show invoiceStatusColor, invoiceStatusBg, showStatusPicker;
 import 'web_layout.dart' show WebScaffold, WebLayoutService;
+import 'theme_controller.dart' show ThemeController;
 
 // ════════════════════════════════════════════════════════════
 //  HELPERS
@@ -385,7 +386,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
           'NEW INVOICE',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
         ),
-        backgroundColor: BillifyColors.primary,
+        backgroundColor: ThemeController.to.primary,
         foregroundColor: const Color(0xFFF7F7FF),
         elevation: 0,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
@@ -418,7 +419,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
             : 'INVOICE LEDGER',
         style: GoogleFonts.poppins(
           fontSize: 11, fontWeight: FontWeight.w900,
-          letterSpacing: 2.0, color: BillifyColors.primary,
+          letterSpacing: 2.0, color: ThemeController.to.primary,
         ),
       ),
       bottom: PreferredSize(
@@ -427,7 +428,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
       ),
       leading: _filterStatus != 'all'
           ? IconButton(
-        icon: const Icon(Icons.arrow_back_rounded, color: BillifyColors.primary),
+        icon: Icon(Icons.arrow_back_rounded, color: ThemeController.to.primary),
         onPressed: () {
           setState(() => _filterStatus = 'all');
           Get.back();
@@ -441,7 +442,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
             child: Text(
               'ALL',
               style: GoogleFonts.poppins(
-                color: BillifyColors.primary,
+                color: ThemeController.to.primary,
                 fontWeight: FontWeight.w800,
                 fontSize: 9, letterSpacing: 1.5,
               ),
@@ -449,7 +450,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
           )
         else
           IconButton(
-            icon: const Icon(Icons.add_rounded, color: BillifyColors.primary),
+            icon: Icon(Icons.add_rounded, color: ThemeController.to.primary),
             onPressed: () => Get.toNamed(AppRoutes.invoiceCreate),
             tooltip: 'New Invoice',
           ),
@@ -464,7 +465,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
       decoration: InputDecoration(
         hintText: 'SEARCH BY CLIENT, INVOICE OR ORDER NO.',
         hintStyle: GoogleFonts.poppins(fontSize: 9, letterSpacing: 0.8, color: BillifyColors.outlineVariant),
-        prefixIcon: const Icon(Icons.search_rounded, color: BillifyColors.primary, size: 18),
+        prefixIcon: Icon(Icons.search_rounded, color: ThemeController.to.primary, size: 18),
         suffixIcon: _searchQuery.isNotEmpty
             ? IconButton(
           icon: const Icon(Icons.clear_rounded, size: 16, color: BillifyColors.textSecondary),
@@ -478,7 +479,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
         filled: true,
         border: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.4), width: 0.5)),
-        focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.primary, width: 1.5)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: ThemeController.to.primary, width: 1.5)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
     );
@@ -500,7 +501,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                 margin: const EdgeInsets.only(right: 2),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: active ? BillifyColors.primary : Colors.transparent,
+                  color: active ? ThemeController.to.primary : Colors.transparent,
                   border: active ? null : Border.all(
                     color: BillifyColors.outlineVariant.withOpacity(0.4), width: 0.5,
                   ),
@@ -526,8 +527,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
       stream: _stream(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: BillifyColors.primary),
+          return Center(
+            child: CircularProgressIndicator(color: ThemeController.to.primary),
           );
         }
 
@@ -638,7 +639,7 @@ class _InvoiceListTile extends StatelessWidget {
                     fmt.format(inv.totalAmount),
                     style: GoogleFonts.poppins(
                       fontSize: 13, fontWeight: FontWeight.w900,
-                      color: BillifyColors.primary, letterSpacing: -0.3,
+                      color: ThemeController.to.primary, letterSpacing: -0.3,
                     ),
                   ),
                 const SizedBox(height: 4),
@@ -833,7 +834,7 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CircularProgressIndicator(color: BillifyColors.primary),
+              CircularProgressIndicator(color: ThemeController.to.primary),
               const SizedBox(height: 16),
               Text('Loading your profile…',
                   style: GoogleFonts.nunito(
@@ -897,13 +898,13 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                   decoration: BoxDecoration(
                     color: active
-                        ? BillifyColors.primary
+                        ? ThemeController.to.primary
                         : done
-                        ? BillifyColors.primary.withOpacity(0.08)
+                        ? ThemeController.to.primary.withOpacity(0.08)
                         : BillifyColors.surfaceLow,
                     border: Border(
                       bottom: BorderSide(
-                        color: active ? BillifyColors.primary : Colors.transparent,
+                        color: active ? ThemeController.to.primary : Colors.transparent,
                         width: 2,
                       ),
                     ),
@@ -918,7 +919,7 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
                         color: active
                             ? const Color(0xFFF7F7FF)
                             : done
-                            ? BillifyColors.primary
+                            ? ThemeController.to.primary
                             : BillifyColors.textSecondary,
                         size: 14,
                       ),
@@ -932,7 +933,7 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
                           color: active
                               ? const Color(0xFFF7F7FF)
                               : done
-                              ? BillifyColors.primary
+                              ? ThemeController.to.primary
                               : BillifyColors.textSecondary,
                         ),
                       ),
@@ -964,7 +965,7 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 48),
                     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                    side: const BorderSide(color: BillifyColors.primary, width: 1.5),
+                    side: BorderSide(color: ThemeController.to.primary, width: 1.5),
                   ),
                   child: Text('← BACK',
                       style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2)),
@@ -975,7 +976,7 @@ class _InvoiceCreateScreenState extends State<InvoiceCreateScreen> {
             Expanded(
               flex: 2,
               child: _saving
-                  ? const Center(child: CircularProgressIndicator(color: BillifyColors.primary))
+                  ? Center(child: CircularProgressIndicator(color: ThemeController.to.primary))
                   : ElevatedButton(
                 onPressed: _step < steps.length - 1
                     ? () => setState(() => _step++)
@@ -1099,7 +1100,7 @@ class _DetailsStepState extends State<_DetailsStep> {
       context: context, initialDate: _orderDate,
       firstDate: DateTime(2020), lastDate: DateTime(2035),
       builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(colorScheme: const ColorScheme.light(primary: BillifyColors.primary)),
+        data: Theme.of(ctx).copyWith(colorScheme: ColorScheme.light(primary: ThemeController.to.primary)),
         child: child!,
       ),
     );
@@ -1172,7 +1173,7 @@ class _DetailsStepState extends State<_DetailsStep> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.calendar_today_rounded, color: BillifyColors.primary, size: 16),
+            Icon(Icons.calendar_today_rounded, color: ThemeController.to.primary, size: 16),
             const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1216,7 +1217,7 @@ class _DetailsStepState extends State<_DetailsStep> {
           color: Colors.white,
           borderRadius: BorderRadius.zero,
           border: Border.all(
-            color: hasLogo ? BillifyColors.primary : BillifyColors.divider,
+            color: hasLogo ? ThemeController.to.primary : BillifyColors.divider,
             width: 1.5,
           ),
         ),
@@ -1226,7 +1227,7 @@ class _DetailsStepState extends State<_DetailsStep> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: BillifyColors.primary.withOpacity(0.07),
+                color: ThemeController.to.primary.withOpacity(0.07),
                 borderRadius: BorderRadius.zero,
               ),
               clipBehavior: Clip.antiAlias,
@@ -1240,9 +1241,9 @@ class _DetailsStepState extends State<_DetailsStep> {
                 File(widget.inv.logoPath),
                 fit: BoxFit.cover,
               )
-                  : const Icon(
+                  : Icon(
                 Icons.add_photo_alternate_rounded,
-                color: BillifyColors.primary,
+                color: ThemeController.to.primary,
                 size: 28,
               ),
             ),
@@ -1257,7 +1258,7 @@ class _DetailsStepState extends State<_DetailsStep> {
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: hasLogo
-                          ? BillifyColors.primary
+                          ? ThemeController.to.primary
                           : BillifyColors.textPrimary,
                     ),
                   ),
@@ -1389,11 +1390,11 @@ class _ItemsStepState extends State<_ItemsStep> {
           controller: _termsCtrl,
           maxLines: 3,
           onChanged: (_) => _syncPayment(),
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Terms & Conditions',
             prefixIcon: Icon(
               Icons.description_outlined,
-              color: BillifyColors.primary,
+              color: ThemeController.to.primary,
             ),
             alignLabelWithHint: true,
           ),
@@ -1431,7 +1432,7 @@ class _ItemsStepState extends State<_ItemsStep> {
           color: Colors.white,
           borderRadius: BorderRadius.zero,
           border: Border.all(
-            color: hasQr ? BillifyColors.primary : BillifyColors.divider,
+            color: hasQr ? ThemeController.to.primary : BillifyColors.divider,
             width: 1.5,
           ),
         ),
@@ -1441,13 +1442,13 @@ class _ItemsStepState extends State<_ItemsStep> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: BillifyColors.primary.withOpacity(0.07),
+                color: ThemeController.to.primary.withOpacity(0.07),
                 borderRadius: BorderRadius.zero,
               ),
               clipBehavior: Clip.antiAlias,
               child: hasQr
                   ? Image.memory(base64Decode(widget.inv.upiQrBase64), fit: BoxFit.cover)
-                  : const Icon(Icons.qr_code_2_rounded, color: BillifyColors.primary, size: 28),
+                  : Icon(Icons.qr_code_2_rounded, color: ThemeController.to.primary, size: 28),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -1459,7 +1460,7 @@ class _ItemsStepState extends State<_ItemsStep> {
                     style: GoogleFonts.poppins(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: hasQr ? BillifyColors.primary : BillifyColors.textPrimary,
+                      color: hasQr ? ThemeController.to.primary : BillifyColors.textPrimary,
                     ),
                   ),
                   Text(
@@ -1552,7 +1553,7 @@ class _ItemsStepState extends State<_ItemsStep> {
   Widget _field2(TextEditingController ctrl, String label, IconData icon, ValueChanged<String> onChanged) =>
       TextField(
         controller: ctrl, onChanged: onChanged,
-        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, color: BillifyColors.primary)),
+        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, color: ThemeController.to.primary)),
       );
 }
 
@@ -1608,7 +1609,7 @@ class _ContentItemRowState extends State<_ContentItemRow> {
         border: Border.all(color: Theme.of(context).dividerColor),
         boxShadow: [
           BoxShadow(
-            color: BillifyColors.primary.withOpacity(0.04),
+            color: ThemeController.to.primary.withOpacity(0.04),
             blurRadius: 6,
           ),
         ],
@@ -1708,7 +1709,7 @@ class _ContentItemRowState extends State<_ContentItemRow> {
               style: GoogleFonts.poppins(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: BillifyColors.primary,
+                color: ThemeController.to.primary,
               ),
             ),
           ),
@@ -1726,7 +1727,7 @@ class _ContentItemRowState extends State<_ContentItemRow> {
           children: [
             Container(
               width: 26, height: 26,
-              decoration: const BoxDecoration(color: BillifyColors.primary),
+              decoration: BoxDecoration(color: ThemeController.to.primary),
               child: Center(
                 child: Text(
                   '${widget.index + 1}',
@@ -1738,7 +1739,7 @@ class _ContentItemRowState extends State<_ContentItemRow> {
             Expanded(
               child: Text(
                 item.serviceTitle,
-                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: BillifyColors.primary),
+                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w700, color: ThemeController.to.primary),
                 maxLines: 1, overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -1777,12 +1778,12 @@ class _ContentItemRowState extends State<_ContentItemRow> {
             },
             decoration: InputDecoration(
               hintText: 'Enter custom category name',
-              prefixIcon: const Icon(Icons.edit_rounded, color: BillifyColors.primary, size: 16),
+              prefixIcon: Icon(Icons.edit_rounded, color: ThemeController.to.primary, size: 16),
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               isDense: true,
               border: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
-              focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.primary, width: 2)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: ThemeController.to.primary, width: 2)),
               filled: true, fillColor: Theme.of(context).scaffoldBackgroundColor,
             ),
             style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600),
@@ -1815,12 +1816,12 @@ class _ContentItemRowState extends State<_ContentItemRow> {
             },
             decoration: InputDecoration(
               hintText: 'Enter custom reel category',
-              prefixIcon: const Icon(Icons.edit_rounded, color: BillifyColors.primary, size: 16),
+              prefixIcon: Icon(Icons.edit_rounded, color: ThemeController.to.primary, size: 16),
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               isDense: true,
               border: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
-              focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.primary, width: 2)),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: ThemeController.to.primary, width: 2)),
               filled: true, fillColor: Theme.of(context).scaffoldBackgroundColor,
             ),
             style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600),
@@ -1837,18 +1838,18 @@ class _ContentItemRowState extends State<_ContentItemRow> {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: value ? BillifyColors.primary.withOpacity(0.1) : Theme.of(context).cardColor,
+          color: value ? ThemeController.to.primary.withOpacity(0.1) : Theme.of(context).cardColor,
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: value ? BillifyColors.primary : Theme.of(context).dividerColor),
+          border: Border.all(color: value ? ThemeController.to.primary : Theme.of(context).dividerColor),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(value ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
-                color: value ? BillifyColors.primary : BillifyColors.textSecondary, size: 14),
+                color: value ? ThemeController.to.primary : BillifyColors.textSecondary, size: 14),
             const SizedBox(width: 4),
             Text(label, style: GoogleFonts.nunito(fontSize: 12, fontWeight: FontWeight.w700,
-                color: value ? BillifyColors.primary : BillifyColors.textSecondary)),
+                color: value ? ThemeController.to.primary : BillifyColors.textSecondary)),
           ],
         ),
       ),
@@ -1865,7 +1866,7 @@ class _ContentItemRowState extends State<_ContentItemRow> {
           isDense: true,
           border:        OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
-          focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.primary, width: 2)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: ThemeController.to.primary, width: 2)),
           filled: true, fillColor: Theme.of(context).scaffoldBackgroundColor,
         ),
         style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
@@ -1905,7 +1906,7 @@ class _ServiceDropdown extends StatelessWidget {
       value: value,
       isExpanded: true,
       decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: BillifyColors.primary, size: 18),
+        prefixIcon: Icon(icon, color: ThemeController.to.primary, size: 18),
       ),
       icon: const Icon(Icons.expand_more_rounded,
           color: BillifyColors.textSecondary, size: 18),
@@ -2040,8 +2041,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(title: const Text('Invoice Detail')),
-        body: const Center(
-          child: CircularProgressIndicator(color: BillifyColors.primary),
+        body: Center(
+          child: CircularProgressIndicator(color: ThemeController.to.primary),
         ),
       );
     }
@@ -2063,9 +2064,9 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             _InvoicePreview(inv: inv),
             const SizedBox(height: 20),
             _generating
-                ? const Center(
+                ? Center(
               child: CircularProgressIndicator(
-                color: BillifyColors.primary,
+                color: ThemeController.to.primary,
               ),
             )
                 : _buildDetailActions(inv),
@@ -2096,12 +2097,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
             if (v == 'pdf') _generateAndSharePdf();
           },
           itemBuilder: (_) => [
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'pdf',
               child: Row(
                 children: [
                   Icon(Icons.picture_as_pdf_rounded,
-                      color: BillifyColors.primary, size: 20),
+                      color: ThemeController.to.primary, size: 20),
                   SizedBox(width: 10),
                   Text('Share as PDF'),
                 ],
@@ -2716,13 +2717,13 @@ class _SectionTitle extends StatelessWidget {
     padding: const EdgeInsets.only(bottom: 10, top: 4),
     child: Row(
       children: [
-        Container(width: 3, height: 14, color: BillifyColors.primary),
+        Container(width: 3, height: 14, color: ThemeController.to.primary),
         const SizedBox(width: 8),
         Text(
           text.toUpperCase(),
           style: GoogleFonts.poppins(
             fontSize: 9, fontWeight: FontWeight.w800,
-            letterSpacing: 1.8, color: BillifyColors.primary,
+            letterSpacing: 1.8, color: ThemeController.to.primary,
           ),
         ),
       ],
@@ -2746,7 +2747,7 @@ Widget _field(
   maxLines:   lines,
   decoration: InputDecoration(
     labelText: label,
-    prefixIcon: Icon(icon, color: BillifyColors.primary),
+    prefixIcon: Icon(icon, color: ThemeController.to.primary),
     alignLabelWithHint: lines > 1,
   ),
 );

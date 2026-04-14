@@ -13,6 +13,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:local_auth/local_auth.dart';
 import 'firebase_options.dart';
+import 'theme_controller.dart';
 import 'dashboard_screen.dart';
 import 'invoice_screens.dart';
 import 'expense_screens.dart';
@@ -56,6 +57,8 @@ void main() async {
         () => WebLayoutService().init(),
     permanent: true,
   );
+  // Init ThemeController first — builds dynamic themes from persisted color
+  Get.put(ThemeController());
   // Init settings (loads persisted theme before first frame)
   Get.put(SettingsController());
 
@@ -108,6 +111,10 @@ class BillifyColors {
 extension AppThemeContext on BuildContext {
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
 
+  /// Live primary colour — updates automatically when ThemeController changes the theme.
+  Color get primary      => Theme.of(this).colorScheme.primary;
+  Color get primaryLight => Theme.of(this).colorScheme.primary.withOpacity(0.7);
+
   Color get bgColor       => isDark ? BillifyColors.darkBackground : BillifyColors.background;
   Color get surfaceColor  => isDark ? BillifyColors.darkSurface    : BillifyColors.surface;
   Color get cardColor     => isDark ? BillifyColors.darkCard       : BillifyColors.surface;
@@ -132,8 +139,8 @@ class BillifyC {
   Color  get border        => _ctx.borderColor;
   Color  get textPrimary   => _ctx.textPrimary;
   Color  get textSecondary => _ctx.textSecondary;
-  Color  get primary       => BillifyColors.primary;
-  Color  get primaryLight  => BillifyColors.primaryLight;
+  Color  get primary       => Theme.of(_ctx).colorScheme.primary;
+  Color  get primaryLight  => Theme.of(_ctx).colorScheme.primary.withOpacity(0.7);
   Color  get paid          => BillifyColors.paid;
   Color  get unpaid        => BillifyColors.unpaid;
   Color  get overdue       => BillifyColors.overdue;
@@ -527,15 +534,22 @@ class _BillifyAppState extends State<BillifyApp>
 
   @override
   Widget build(BuildContext context) {
+    // Do NOT wrap GetMaterialApp in Obx — rebuilding the app root destroys
+    // the Navigator and corrupts Flutter's element tree (crash: _elements.contains).
+    // Theme reactivity is handled by ThemeController._applyTheme() which calls
+    // Get.changeTheme() — no app-level rebuild is needed.
     return GetMaterialApp(
       // ── Identity ──
       title:           'Billify',
       debugShowCheckedModeBanner: false,
 
-      // ── Themes — driven by SettingsController ──
-      theme:     BillifyTheme.light,
-      darkTheme: BillifyTheme.dark,
-      themeMode: ThemeMode.system,
+      // ── Always light — dark/system modes removed ──
+      // Initial theme built once; live color updates come via Get.changeTheme()
+      // called inside ThemeController._applyTheme() on every change.
+      theme:     Get.isRegistered<ThemeController>()
+          ? ThemeController.to.buildLightTheme()
+          : BillifyTheme.light,
+      themeMode: ThemeMode.light,
 
       // ── Web layout gate (device picker + persistent desktop rail) ──
       builder: (context, child) =>
@@ -760,8 +774,11 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final splashColor = Get.isRegistered<ThemeController>()
+        ? ThemeController.to.splashBg
+        : BillifyColors.primary;
     return Scaffold(
-      backgroundColor: BillifyColors.primary,
+      backgroundColor: splashColor,
       body: Stack(
         children: [
           // Architectural grid dot pattern
@@ -1030,7 +1047,7 @@ class BillifyInputDialogState extends State<BillifyInputDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Top accent bar
-          Container(height: 3, color: BillifyColors.primary),
+          Container(height: 3, color: Get.isRegistered<ThemeController>() ? ThemeController.to.primary : BillifyColors.primary),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
             child: Column(
@@ -1121,7 +1138,7 @@ class BillifyImageSourceSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Top accent bar
-          Container(height: 3, color: BillifyColors.primary),
+          Container(height: 3, color: Get.isRegistered<ThemeController>() ? ThemeController.to.primary : BillifyColors.primary),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
             child: Column(
@@ -1248,7 +1265,7 @@ class BillifyOptionsSheet<T> extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Top accent bar
-          Container(height: 3, color: BillifyColors.primary),
+          Container(height: 3, color: Get.isRegistered<ThemeController>() ? ThemeController.to.primary : BillifyColors.primary),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
             child: Column(
@@ -1453,44 +1470,46 @@ class _BillifyDrawerState extends State<BillifyDrawer>
                         if (missing == 0 && _logoBase64 != null) {
                           return const SizedBox.shrink();
                         }
-                        return GestureDetector(
-                          onTap: () {
-                            final cb = DesktopNavCallback.maybeOf(context);
-                            if (cb != null) { cb.navigate(AppRoutes.profile); return; }
-                            Navigator.of(context).pop();
-                            _goTo(AppRoutes.dashboard);
-                            Get.toNamed(AppRoutes.profile);
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.fromLTRB(0, 0, 0, 0),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: BillifyColors.primary.withOpacity(0.08),
-                              border: const Border(
-                                left: BorderSide(color: BillifyColors.primary, width: 3),
+                        return Obx(() {
+                          final primary = ThemeController.to.primaryColorValue.value
+                              .withOpacity(ThemeController.to.primaryOpacity.value);
+                          return GestureDetector(
+                            onTap: () {
+                              final cb = DesktopNavCallback.maybeOf(context);
+                              if (cb != null) { cb.navigate(AppRoutes.profile); return; }
+                              Navigator.of(context).pop();
+                              _goTo(AppRoutes.dashboard);
+                              Get.toNamed(AppRoutes.profile);
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.fromLTRB(0, 0, 0, 0),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: primary.withOpacity(0.08),
+                                border: Border(
+                                  left: BorderSide(color: primary, width: 3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit_note_rounded, color: primary, size: 14),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '$missing field${missing != 1 ? 's' : ''} pending',
+                                      style: GoogleFonts.poppins(
+                                          fontSize: 10,
+                                          letterSpacing: 0.8,
+                                          color: primary,
+                                          fontWeight: FontWeight.w800),
+                                    ),
+                                  ),
+                                  Icon(Icons.chevron_right_rounded, color: primary, size: 14),
+                                ],
                               ),
                             ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.edit_note_rounded,
-                                    color: BillifyColors.primary, size: 14),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    '$missing field${missing != 1 ? 's' : ''} pending',
-                                    style: GoogleFonts.poppins(
-                                        fontSize: 10,
-                                        letterSpacing: 0.8,
-                                        color: BillifyColors.primary,
-                                        fontWeight: FontWeight.w800),
-                                  ),
-                                ),
-                                const Icon(Icons.chevron_right_rounded,
-                                    color: BillifyColors.primary, size: 14),
-                              ],
-                            ),
-                          ),
-                        );
+                          );
+                        });
                       },
                     ),
 
@@ -1633,7 +1652,15 @@ class _DrawerHeader extends StatelessWidget {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(16, 48, 16, 16),
-        color: BillifyColors.primary,
+        decoration: BoxDecoration(
+          gradient: Get.isRegistered<ThemeController>()
+              ? ThemeController.to.headerGradient
+              : const LinearGradient(
+            colors: [BillifyColors.primary, BillifyColors.primaryLight],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1778,59 +1805,65 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isActive = activeRoute == route;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      decoration: BoxDecoration(
-        color: isActive ? BillifyColors.primary.withOpacity(0.08) : Colors.transparent,
-        border: Border(
-          left: BorderSide(
-            color: isActive ? BillifyColors.primary : Colors.transparent,
-            width: 3,
+    // Obx must read .obs fields directly (not derived getters) so GetX can
+    // subscribe to them and trigger a rebuild when the theme colour changes.
+    return Obx(() {
+      final primary = ThemeController.to.primaryColorValue.value
+          .withOpacity(ThemeController.to.primaryOpacity.value);
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: isActive ? primary.withOpacity(0.08) : Colors.transparent,
+          border: Border(
+            left: BorderSide(
+              color: isActive ? primary : Colors.transparent,
+              width: 3,
+            ),
           ),
         ),
-      ),
-      child: InkWell(
-        onTap: () {
-          // Desktop: use DesktopNavCallback — never call Navigator.pop()
-          // because the drawer is a plain widget, not a Flutter Drawer overlay.
-          final cb = DesktopNavCallback.maybeOf(context);
-          if (cb != null) { cb.navigate(route); return; }
-          // Mobile: existing behaviour unchanged.
-          Navigator.of(context).pop();
-          if (isActive) return;
-          if (route == AppRoutes.dashboard) {
-            _goTo(AppRoutes.dashboard);
-          } else {
-            _goTo(AppRoutes.dashboard);
-            Get.toNamed(route);
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: isActive ? BillifyColors.primary : BillifyColors.textSecondary,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label.toUpperCase(),
-                  style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-                    letterSpacing: 0.8,
-                    color: isActive ? BillifyColors.primary : BillifyColors.textSecondary,
+        child: InkWell(
+          onTap: () {
+            // Desktop: use DesktopNavCallback — never call Navigator.pop()
+            // because the drawer is a plain widget, not a Flutter Drawer overlay.
+            final cb = DesktopNavCallback.maybeOf(context);
+            if (cb != null) { cb.navigate(route); return; }
+            // Mobile: existing behaviour unchanged.
+            Navigator.of(context).pop();
+            if (isActive) return;
+            if (route == AppRoutes.dashboard) {
+              _goTo(AppRoutes.dashboard);
+            } else {
+              _goTo(AppRoutes.dashboard);
+              Get.toNamed(route);
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: isActive ? primary : BillifyColors.textSecondary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label.toUpperCase(),
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+                      letterSpacing: 0.8,
+                      color: isActive ? primary : BillifyColors.textSecondary,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
 
@@ -1907,7 +1940,7 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Stack(
         children: [
           // Top primary bar
-          Positioned(top: 0, left: 0, right: 0, child: Container(height: 3, color: BillifyColors.primary)),
+          Positioned(top: 0, left: 0, right: 0, child: Container(height: 3, color: Get.isRegistered<ThemeController>() ? ThemeController.to.primary : BillifyColors.primary)),
           // Bottom bar
           Positioned(bottom: 0, left: 0, right: 0, child: Container(height: 1, color: BillifyColors.surfaceHigh)),
           SafeArea(
@@ -3333,14 +3366,18 @@ class _AvatarCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: Get.isRegistered<ThemeController>()
+            ? ThemeController.to.headerGradient
+            : const LinearGradient(
           colors: [BillifyColors.primary, BillifyColors.primaryLight],
           begin: Alignment.topLeft,
           end:   Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.zero,
         boxShadow: [
-          BoxShadow(color: BillifyColors.primary.withOpacity(0.35),
+          BoxShadow(color: (Get.isRegistered<ThemeController>()
+              ? ThemeController.to.primary
+              : BillifyColors.primary).withOpacity(0.35),
               blurRadius: 16, offset: const Offset(0, 8)),
         ],
       ),
@@ -3563,7 +3600,7 @@ class _LockScreenState extends State<LockScreen>
         // Silently block back — must authenticate
       },
       child: Scaffold(
-        backgroundColor: BillifyColors.primary,
+        backgroundColor: Get.isRegistered<ThemeController>() ? ThemeController.to.splashBg : BillifyColors.primary,
         body: SafeArea(
           child: Center(
             child: Column(
@@ -3695,19 +3732,19 @@ class SettingsController extends GetxController {
   }
 
   // ── Theme ──────────────────────────────────────────────────
+  // ThemeController owns the full theme. SettingsController no longer
+  // controls theme mode — always light.
   void _applyTheme() {
-    switch (themeMode.value) {
-      case 'light':  Get.changeThemeMode(ThemeMode.light);  break;
-      case 'dark':   Get.changeThemeMode(ThemeMode.dark);   break;
-      default:       Get.changeThemeMode(ThemeMode.light); break;
-    }
+    // Always light — no-op, ThemeController handles everything
+    Get.changeThemeMode(ThemeMode.light);
   }
 
   Future<void> setThemeMode(String val) async {
-    themeMode.value = val;
+    // Dark/system removed — always force light
+    themeMode.value = 'light';
     _applyTheme();
     final p = await SharedPreferences.getInstance();
-    await p.setString(_PrefKeys.themeMode, val);
+    await p.setString(_PrefKeys.themeMode, 'light');
   }
 
   // ── Persist helpers ────────────────────────────────────────
@@ -4114,14 +4151,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  String _themeModeLabel(String v) {
-    switch (v) {
-      case 'light': return 'Light';
-      case 'dark':  return 'Dark';
-      default:      return 'light';
-    }
-  }
-
   String _lockLabel(int v) {
     switch (v) {
       case 1:  return '1 minute';
@@ -4176,6 +4205,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildAppearanceCard() {
     return _card(children: [
+      _tile(
+        icon: Icons.palette_rounded,
+        iconColor: Get.isRegistered<ThemeController>()
+            ? ThemeController.to.primary
+            : BillifyColors.primary,
+        title: 'Theme Studio',
+        subtitle: 'Customize colors, gradients & live preview',
+        onTap: () => Get.to(() => const ThemeCustomizationScreen(),
+            transition: Transition.rightToLeft),
+      ),
       _switchTile(
         icon: Icons.view_agenda_rounded,
         iconColor: const Color(0xFF00BCD4),

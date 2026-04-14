@@ -15,6 +15,7 @@ import 'package:intl/intl.dart';
 import 'main.dart'
     show BillifyColors, AppRoutes, BillifyDrawer, BillifyDialog, BillifyC;
 import 'web_layout.dart' show WebScaffold;
+import 'theme_controller.dart' show ThemeController;
 
 // ════════════════════════════════════════════════════════════
 //  CLIENT MODEL
@@ -289,7 +290,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
           style: GoogleFonts.poppins(
               fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
         ),
-        backgroundColor: BillifyColors.primary,
+        backgroundColor: ThemeController.to.primary,
         foregroundColor: const Color(0xFFF7F7FF),
         elevation: 0,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
@@ -303,9 +304,9 @@ class _ClientListScreenState extends State<ClientListScreen> {
               stream: _stream,
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(
+                  return Center(
                     child: CircularProgressIndicator(
-                        color: BillifyColors.primary),
+                        color: ThemeController.to.primary),
                   );
                 }
                 if (snap.hasError) {
@@ -342,7 +343,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
       title: Text(
         'CLIENTS',
         style: GoogleFonts.poppins(
-          color: BillifyColors.primary,
+          color: ThemeController.to.primary,
           fontSize: 11,
           fontWeight: FontWeight.w900,
           letterSpacing: 2.0,
@@ -361,7 +362,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
             children: [
               Icon(Icons.filter_list_rounded,
                   color: _hasFilter
-                      ? BillifyColors.primary
+                      ? ThemeController.to.primary
                       : BillifyColors.textSecondary,
                   size: 22),
               if (_hasFilter)
@@ -395,7 +396,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
         decoration: InputDecoration(
           hintText: 'Search by name or mobile…',
           prefixIcon:
-          const Icon(Icons.search_rounded, color: BillifyColors.primary, size: 18),
+          Icon(Icons.search_rounded, color: ThemeController.to.primary, size: 18),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
             icon: const Icon(Icons.close_rounded,
@@ -524,14 +525,14 @@ class _ClientCard extends StatelessWidget {
             Container(
               width: 42,
               height: 42,
-              color: BillifyColors.primary.withOpacity(0.12),
+              color: ThemeController.to.primary.withOpacity(0.12),
               child: Center(
                 child: Text(
                   client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: BillifyColors.primary,
+                    color: ThemeController.to.primary,
                   ),
                 ),
               ),
@@ -565,7 +566,7 @@ class _ClientCard extends StatelessWidget {
                     children: [
                       _MiniChip(label: client.displayCategory),
                       _MiniChip(label: client.displayReelCategory,
-                          color: BillifyColors.primaryLight),
+                          color: ThemeController.to.primaryLight),
                     ],
                   ),
                 ],
@@ -612,7 +613,7 @@ class _ClientCard extends StatelessWidget {
                   children: [
                     _IconAction(
                       icon: Icons.edit_rounded,
-                      color: BillifyColors.primary,
+                      color: ThemeController.to.primary,
                       onTap: () => Get.toNamed(AppRoutes.clientEdit,
                           arguments: client.id),
                     ),
@@ -767,7 +768,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
           colorScheme: Theme.of(ctx).colorScheme.copyWith(
-            primary: BillifyColors.primary,
+            primary: ThemeController.to.primary,
           ),
         ),
         child: child!,
@@ -780,7 +781,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
           colorScheme: Theme.of(ctx).colorScheme.copyWith(
-            primary: BillifyColors.primary,
+            primary: ThemeController.to.primary,
           ),
         ),
         child: child!,
@@ -852,13 +853,13 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       appBar: AppBar(
         backgroundColor: BillifyColors.background,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: BillifyColors.primary),
+          icon: Icon(Icons.arrow_back_rounded, color: ThemeController.to.primary),
           onPressed: () => Get.back(),
         ),
         title: Text(
           _isEdit ? 'EDIT CLIENT' : 'NEW CLIENT',
           style: GoogleFonts.poppins(
-            color: BillifyColors.primary,
+            color: ThemeController.to.primary,
             fontSize: 11,
             fontWeight: FontWeight.w900,
             letterSpacing: 2.0,
@@ -872,9 +873,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
         ),
       ),
       body: _isFetching
-          ? const Center(
+          ? Center(
           child:
-          CircularProgressIndicator(color: BillifyColors.primary))
+          CircularProgressIndicator(color: ThemeController.to.primary))
           : Form(
         key: _formKey,
         child: ListView(
@@ -888,10 +889,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
               child: TextFormField(
                 controller: _nameCtrl,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Enter client full name',
                   prefixIcon: Icon(Icons.person_rounded,
-                      color: BillifyColors.primary, size: 18),
+                      color: ThemeController.to.primary, size: 18),
                 ),
                 validator: (v) =>
                 (v == null || v.trim().isEmpty)
@@ -911,10 +912,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(15),
                 ],
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Enter mobile number (optional)',
                   prefixIcon: Icon(Icons.phone_rounded,
-                      color: BillifyColors.primary, size: 18),
+                      color: ThemeController.to.primary, size: 18),
                 ),
                 validator: (v) {
                   if (v != null && v.trim().isNotEmpty && v.trim().length < 7) {
@@ -944,8 +945,8 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_month_rounded,
-                          color: BillifyColors.primary, size: 18),
+                      Icon(Icons.calendar_month_rounded,
+                          color: ThemeController.to.primary, size: 18),
                       const SizedBox(width: 10),
                       Text(
                         _projectStartDate == null
@@ -994,10 +995,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
               TextFormField(
                 controller: _customCategoryCtrl,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Enter custom category name',
                   prefixIcon: Icon(Icons.edit_rounded,
-                      color: BillifyColors.primary, size: 16),
+                      color: ThemeController.to.primary, size: 16),
                 ),
                 validator: (v) => _clientCategory == 'Custom' &&
                     (v == null || v.trim().isEmpty)
@@ -1022,10 +1023,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
               TextFormField(
                 controller: _customReelCtrl,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Enter custom reel category',
                   prefixIcon: Icon(Icons.edit_rounded,
-                      color: BillifyColors.primary, size: 16),
+                      color: ThemeController.to.primary, size: 16),
                 ),
                 validator: (v) => _reelCategory == 'Custom' &&
                     (v == null || v.trim().isEmpty)
@@ -1050,10 +1051,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
                   FilteringTextInputFormatter.allow(
                       RegExp(r'^\d*\.?\d{0,2}')),
                 ],
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: '0.00',
                   prefixIcon: Icon(Icons.currency_rupee_rounded,
-                      color: BillifyColors.primary, size: 18),
+                      color: ThemeController.to.primary, size: 18),
                 ),
                 validator: (v) =>
                 (v == null || v.trim().isEmpty)
@@ -1078,10 +1079,10 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
               TextFormField(
                 controller: _customPaymentTypeCtrl,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Describe the payment method',
                   prefixIcon: Icon(Icons.edit_rounded,
-                      color: BillifyColors.primary, size: 16),
+                      color: ThemeController.to.primary, size: 16),
                 ),
                 validator: (v) => _paymentType == 'Other' &&
                     (v == null || v.trim().isEmpty)
@@ -1169,7 +1170,7 @@ class _DropdownField<T> extends StatelessWidget {
       value: value,
       isExpanded: true,
       decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: BillifyColors.primary, size: 18),
+        prefixIcon: Icon(icon, color: ThemeController.to.primary, size: 18),
       ),
       icon: const Icon(Icons.expand_more_rounded,
           color: BillifyColors.textSecondary, size: 18),
@@ -1264,14 +1265,14 @@ class ClientDetailScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: BillifyColors.background,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded,
-              color: BillifyColors.primary),
+          icon: Icon(Icons.arrow_back_rounded,
+              color: ThemeController.to.primary),
           onPressed: () => Get.back(),
         ),
         title: Text(
           'CLIENT PROFILE',
           style: GoogleFonts.poppins(
-            color: BillifyColors.primary,
+            color: ThemeController.to.primary,
             fontSize: 11,
             fontWeight: FontWeight.w900,
             letterSpacing: 2.0,
@@ -1285,8 +1286,8 @@ class ClientDetailScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit_rounded,
-                color: BillifyColors.primary, size: 20),
+            icon: Icon(Icons.edit_rounded,
+                color: ThemeController.to.primary, size: 20),
             onPressed: () =>
                 Get.toNamed(AppRoutes.clientEdit, arguments: clientId),
           ),
@@ -1301,9 +1302,9 @@ class ClientDetailScreen extends StatelessWidget {
             .snapshots(),
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(
+            return Center(
                 child: CircularProgressIndicator(
-                    color: BillifyColors.primary));
+                    color: ThemeController.to.primary));
           }
           if (!snap.hasData || !snap.data!.exists) {
             return const Center(child: Text('Client not found.'));
@@ -1336,7 +1337,7 @@ class ClientDetailScreen extends StatelessWidget {
                 Container(
                   width: 64,
                   height: 64,
-                  color: BillifyColors.primary.withOpacity(0.12),
+                  color: ThemeController.to.primary.withOpacity(0.12),
                   child: Center(
                     child: Text(
                       client.name.isNotEmpty
@@ -1345,7 +1346,7 @@ class ClientDetailScreen extends StatelessWidget {
                       style: GoogleFonts.poppins(
                         fontSize: 28,
                         fontWeight: FontWeight.w900,
-                        color: BillifyColors.primary,
+                        color: ThemeController.to.primary,
                       ),
                     ),
                   ),
@@ -1399,7 +1400,7 @@ class ClientDetailScreen extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
-            color: BillifyColors.primary,
+            color: ThemeController.to.primary,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1545,7 +1546,7 @@ class _DetailCard extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                    width: 3, height: 12, color: BillifyColors.primary),
+                    width: 3, height: 12, color: ThemeController.to.primary),
                 const SizedBox(width: 8),
                 Text(
                   title,
@@ -1553,7 +1554,7 @@ class _DetailCard extends StatelessWidget {
                     fontSize: 9,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.4,
-                    color: BillifyColors.primary,
+                    color: ThemeController.to.primary,
                   ),
                 ),
               ],
@@ -1598,7 +1599,7 @@ class _DetailRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: BillifyColors.primary.withOpacity(0.7)),
+          Icon(icon, size: 16, color: ThemeController.to.primary.withOpacity(0.7)),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -1671,7 +1672,7 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(height: 3, color: BillifyColors.primary),
+          Container(height: 3, color: ThemeController.to.primary),
           const SizedBox(height: 16),
           Text(
             'FILTER CLIENTS',
@@ -1679,7 +1680,7 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
               fontSize: 11,
               fontWeight: FontWeight.w900,
               letterSpacing: 1.5,
-              color: BillifyColors.primary,
+              color: ThemeController.to.primary,
             ),
           ),
           const SizedBox(height: 16),
@@ -1764,11 +1765,11 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: isSel
-                      ? BillifyColors.primary
+                      ? ThemeController.to.primary
                       : BillifyColors.surfaceLow,
                   border: Border.all(
                     color: isSel
-                        ? BillifyColors.primary
+                        ? ThemeController.to.primary
                         : BillifyColors.outlineVariant,
                   ),
                 ),
@@ -1809,7 +1810,7 @@ class DashboardRecentClients extends StatelessWidget {
           // Section header
           Row(
             children: [
-              Container(width: 3, height: 14, color: BillifyColors.primary),
+              Container(width: 3, height: 14, color: ThemeController.to.primary),
               const SizedBox(width: 8),
               Text(
                 'RECENT CLIENTS',
@@ -1817,7 +1818,7 @@ class DashboardRecentClients extends StatelessWidget {
                   fontSize: 9,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 1.8,
-                  color: BillifyColors.primary,
+                  color: ThemeController.to.primary,
                 ),
               ),
               const Spacer(),
@@ -1829,7 +1830,7 @@ class DashboardRecentClients extends StatelessWidget {
                     fontSize: 8,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.2,
-                    color: BillifyColors.primary,
+                    color: ThemeController.to.primary,
                   ),
                 ),
               ),
@@ -1846,9 +1847,9 @@ class DashboardRecentClients extends StatelessWidget {
                 .snapshots(),
             builder: (ctx, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(
+                return Center(
                     child: CircularProgressIndicator(
-                        color: BillifyColors.primary, strokeWidth: 2));
+                        color: ThemeController.to.primary, strokeWidth: 2));
               }
               final docs = snap.data?.docs ?? [];
               if (docs.isEmpty) {
@@ -1871,17 +1872,17 @@ class DashboardRecentClients extends StatelessWidget {
               padding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: BillifyColors.primary.withOpacity(0.06),
+                color: ThemeController.to.primary.withOpacity(0.06),
                 border: Border.all(
-                    color: BillifyColors.primary.withOpacity(0.2),
+                    color: ThemeController.to.primary.withOpacity(0.2),
                     width: 1,
                     style: BorderStyle.solid),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.person_add_rounded,
-                      size: 14, color: BillifyColors.primary),
+                  Icon(Icons.person_add_rounded,
+                      size: 14, color: ThemeController.to.primary),
                   const SizedBox(width: 8),
                   Text(
                     'ADD NEW CLIENT',
@@ -1889,7 +1890,7 @@ class DashboardRecentClients extends StatelessWidget {
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.2,
-                      color: BillifyColors.primary,
+                      color: ThemeController.to.primary,
                     ),
                   ),
                 ],
@@ -1923,14 +1924,14 @@ class _DashboardClientRow extends StatelessWidget {
             Container(
               width: 32,
               height: 32,
-              color: BillifyColors.primary.withOpacity(0.12),
+              color: ThemeController.to.primary.withOpacity(0.12),
               child: Center(
                 child: Text(
                   client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    color: BillifyColors.primary,
+                    color: ThemeController.to.primary,
                   ),
                 ),
               ),
@@ -2001,9 +2002,9 @@ class _DashboardEmptyClients extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            color: BillifyColors.primary.withOpacity(0.1),
-            child: const Icon(Icons.people_outline_rounded,
-                color: BillifyColors.primary, size: 20),
+            color: ThemeController.to.primary.withOpacity(0.1),
+            child: Icon(Icons.people_outline_rounded,
+                color: ThemeController.to.primary, size: 20),
           ),
           const SizedBox(width: 12),
           Text(
@@ -2031,7 +2032,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(width: 3, height: 14, color: BillifyColors.primary),
+        Container(width: 3, height: 14, color: ThemeController.to.primary),
         const SizedBox(width: 8),
         Text(
           label,
@@ -2039,7 +2040,7 @@ class _SectionHeader extends StatelessWidget {
             fontSize: 9,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.8,
-            color: BillifyColors.primary,
+            color: ThemeController.to.primary,
           ),
         ),
       ],
@@ -2058,8 +2059,8 @@ class _FilterChip extends StatelessWidget {
       margin: const EdgeInsets.only(right: 6),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: BillifyColors.primary.withOpacity(0.1),
-        border: Border.all(color: BillifyColors.primary.withOpacity(0.4)),
+        color: ThemeController.to.primary.withOpacity(0.1),
+        border: Border.all(color: ThemeController.to.primary.withOpacity(0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -2070,14 +2071,14 @@ class _FilterChip extends StatelessWidget {
               fontSize: 8,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.6,
-              color: BillifyColors.primary,
+              color: ThemeController.to.primary,
             ),
           ),
           const SizedBox(width: 4),
           GestureDetector(
             onTap: onRemove,
-            child: const Icon(Icons.close_rounded,
-                size: 12, color: BillifyColors.primary),
+            child: Icon(Icons.close_rounded,
+                size: 12, color: ThemeController.to.primary),
           ),
         ],
       ),
@@ -2099,9 +2100,9 @@ class _EmptyClientState extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(20),
-              color: BillifyColors.primary.withOpacity(0.08),
-              child: const Icon(Icons.people_outline_rounded,
-                  size: 48, color: BillifyColors.primary),
+              color: ThemeController.to.primary.withOpacity(0.08),
+              child: Icon(Icons.people_outline_rounded,
+                  size: 48, color: ThemeController.to.primary),
             ),
             const SizedBox(height: 20),
             Text(

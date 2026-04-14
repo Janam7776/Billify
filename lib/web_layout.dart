@@ -122,41 +122,75 @@ class DesktopNavCallback extends InheritedWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  WebLayoutGate — sits in GetMaterialApp.builder, above the navigator.
-//  Shows device-picker dialog once on first web launch, then is transparent.
+//  WebLayoutGate — injected via GetMaterialApp.builder, above the navigator.
+//
+//  ROOT CAUSE OF ALL CRASHES (both TypeErrorImpl and _elements.contains):
+//  ───────────────────────────────────────────────────────────────────────
+//  GetMaterialApp's builder: callback is called DURING the Navigator's very
+//  first mount / restoreState pass.  At that exact moment, GetX's
+//  initialRoutesGenerate tries to resolve every route's .page getter.
+//  If the builder returns anything other than a bare passthrough on that
+//  first synchronous call (e.g. a Scaffold, a Row, an Obx, or ANY widget
+//  that rebuilds asynchronously), the Navigator element gets deactivated
+//  and re-inflated in a different tree position, which corrupts
+//  BuildOwner's element set → crash.
+//
+//  THE ONLY SAFE PATTERN:
+//  ──────────────────────
+//  1. On the very first build, return `child` with ZERO wrapping.
+//  2. After the first frame is fully committed (addPostFrameCallback),
+//     flip a flag and rebuild — now it is safe to add the shell around
+//     the already-mounted Navigator.
+//  3. The shell (Scaffold + Row) must be a StatefulWidget so it owns
+//     a stable element slot; the Navigator (child) must always occupy
+//     the SAME slot inside that Row — it must NEVER be moved, removed,
+//     or re-parented by any reactive rebuild.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Injected via GetMaterialApp builder — lives above the GetX navigator
-/// so it is never destroyed on route changes.
-///
-/// Responsibilities:
-///   • On desktop-web: wraps [child] in [DesktopShell] (permanent rail),
-///     but ONLY for app routes. Auth/splash/terms screens bypass the shell.
-///   • On mobile / Android / iOS: transparent passthrough.
-class WebLayoutGate extends StatelessWidget {
+class WebLayoutGate extends StatefulWidget {
   final Widget child;
   const WebLayoutGate({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) {
-    if (!kIsWeb) return child;
+  State<WebLayoutGate> createState() => _WebLayoutGateState();
+}
 
-    return Obx(() {
-      final svc       = WebLayoutService.to;
-      final isDesktop = svc.isDesktop;
-      final route     = svc.activeRoute.value;
+class _WebLayoutGateState extends State<WebLayoutGate> {
+  // False on the very first synchronous build so we return child bare.
+  // Flipped to true after the first frame — safe to add the shell.
+  bool _ready = false;
 
-      // Auth / onboarding screens never show the permanent rail.
-      if (!isDesktop || _kShelllessRoutes.contains(route)) return child;
-
-      return DesktopShell(child: child);
+  @override
+  void initState() {
+    super.initState();
+    // Wait until the Navigator has fully mounted before wrapping it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _ready = true);
     });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // First synchronous build: return child with ZERO wrapping.
+    // GetX resolves all route .page getters during this call —
+    // any extra widget here corrupts the element tree.
+    if (!_ready || !kIsWeb) return widget.child;
+
+    // After first frame: safe to wrap with the persistent shell.
+    // DesktopShell keeps widget.child at a FIXED tree position forever.
+    return DesktopShell(child: widget.child);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  DesktopShell — persistent root scaffold, rendered ONCE above GetX routing.
-//  Left: permanent 260 px rail.   Right: the full GetX page stack unchanged.
+//  DesktopShell — rendered ONCE, after the Navigator is fully mounted.
+//
+//  Layout:  [ optional rail | optional divider | Expanded(child) ]
+//
+//  INVARIANT: widget.child (the Navigator) is ALWAYS the last child of the
+//  Row, at a fixed index.  It is NEVER inside any Obx, GetBuilder, or
+//  conditional that could move/remove/re-parent it.  Only the rail and
+//  divider slots are reactive.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class DesktopShell extends StatelessWidget {
@@ -169,49 +203,60 @@ class DesktopShell extends StatelessWidget {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Row(
         children: [
-          // ── Permanent rail — never rebuilt by route changes ──────────────
-          SizedBox(
-            width: _kRailWidth,
-            child: Material(
-              color: BillifyColors.surface,
-              elevation: 0,
-              child: Column(
-                children: [
-                  SizedBox(height: MediaQuery.of(context).padding.top),
-                  Expanded(
-                    child: Obx(
-                          () => DesktopNavCallback(
+          // ── Rail slot — reactive, but child is NEVER inside this Obx ────
+          Obx(() {
+            final svc      = WebLayoutService.to;
+            final showRail = svc.isDesktop &&
+                !_kShelllessRoutes.contains(svc.activeRoute.value);
+
+            if (!showRail) return const SizedBox.shrink();
+
+            return SizedBox(
+              width: _kRailWidth,
+              child: Material(
+                color: BillifyColors.surface,
+                elevation: 0,
+                child: Column(
+                  children: [
+                    SizedBox(height: MediaQuery.of(context).padding.top),
+                    Expanded(
+                      child: DesktopNavCallback(
                         navigate: _handleNav,
                         child: BillifyDrawer(
-                          activeRoute: WebLayoutService.to.activeRoute.value,
+                          activeRoute: svc.activeRoute.value,
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ),
-          // ── Divider ──────────────────────────────────────────────────────
-          Container(
-            width: 1,
-            color: BillifyColors.outlineVariant.withOpacity(0.3),
-          ),
-          // ── Content pane — GetX renders pages here ───────────────────────
+            );
+          }),
+
+          // ── Divider slot — reactive ───────────────────────────────────
+          Obx(() {
+            final svc      = WebLayoutService.to;
+            final showRail = svc.isDesktop &&
+                !_kShelllessRoutes.contains(svc.activeRoute.value);
+            if (!showRail) return const SizedBox.shrink();
+            return Container(
+              width: 1,
+              color: BillifyColors.outlineVariant.withOpacity(0.3),
+            );
+          }),
+
+          // ── Content pane ─────────────────────────────────────────────
+          // child is ALWAYS here at a FIXED index.
+          // No Obx, no conditional, no reactive widget wraps this slot.
           Expanded(child: child),
         ],
       ),
     );
   }
 
-  /// Called by _NavItem / profile tap when inside the permanent rail.
-  /// Uses Get.offAllNamed so route middleware still applies.
   void _handleNav(String route) {
-    // Sync route: updates highlight AND hides shell on auth screens.
     WebLayoutService.to.syncRoute(route);
-    // Navigate directly — AuthMiddleware still applies via GetX.
     Get.offAllNamed(route);
-    // No Navigator.pop() — we are NOT inside a Flutter Drawer widget.
   }
 }
 

@@ -39,6 +39,7 @@ import 'main.dart'
 import 'expense_screens.dart' show ExpenseListScreen, AddExpenseScreen;
 import 'client_screens.dart' show DashboardRecentClients;
 import 'web_layout.dart' show WebScaffold, WebLayoutService;
+import 'theme_controller.dart' show ThemeController;
 
 // ── Desktop-safe navigation ────────────────────────────────
 void _navTo(String route, {Object? arguments}) {
@@ -270,7 +271,7 @@ class DashboardScreen extends StatelessWidget {
           context: context,
           builder: (ctx) => BillifyDialog(
             icon: Icons.exit_to_app_rounded,
-            iconColor: BillifyColors.primary,
+            iconColor: ThemeController.to.primary,
             title: 'Exit Billify?',
             body: 'Are you sure you want to exit the app?',
             confirmLabel: 'Exit',
@@ -304,7 +305,7 @@ class DashboardScreen extends StatelessWidget {
       title: Text(
         'DASHBOARD',
         style: GoogleFonts.poppins(
-          color: BillifyColors.primary,
+          color: ThemeController.to.primary,
           fontSize: 11,
           fontWeight: FontWeight.w900,
           letterSpacing: 2.0,
@@ -357,7 +358,7 @@ class DashboardScreen extends StatelessWidget {
             style: GoogleFonts.poppins(
                 fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
           ),
-          backgroundColor: BillifyColors.primary,
+          backgroundColor: ThemeController.to.primary,
           foregroundColor: const Color(0xFFF7F7FF),
           elevation: 0,
           shape:
@@ -404,14 +405,14 @@ class DashboardScreen extends StatelessWidget {
 
                 if (clientSnap.connectionState == ConnectionState.waiting &&
                     !clientSnap.hasData) {
-                  return const Center(
+                  return Center(
                     child: CircularProgressIndicator(
-                        color: BillifyColors.primary),
+                        color: ThemeController.to.primary),
                   );
                 }
 
                 return RefreshIndicator(
-                  color: BillifyColors.primary,
+                  color: ThemeController.to.primary,
                   onRefresh: () async =>
                       Future.delayed(const Duration(milliseconds: 400)),
                   child: CustomScrollView(
@@ -484,7 +485,7 @@ class _SummaryCardsSection extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                    width: 3, height: 14, color: BillifyColors.primary),
+                    width: 3, height: 14, color: ThemeController.to.primary),
                 const SizedBox(width: 8),
                 Text(
                   'CLIENT FINANCIALS',
@@ -492,7 +493,7 @@ class _SummaryCardsSection extends StatelessWidget {
                     fontSize: 9,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.8,
-                    color: BillifyColors.primary,
+                    color: ThemeController.to.primary,
                   ),
                 ),
               ],
@@ -583,7 +584,7 @@ class _SummaryCardsSection extends StatelessWidget {
                 label: 'Active Clients',
                 value: '${d!.totalClients} client${d!.totalClients == 1 ? '' : 's'}',
                 icon: Icons.people_rounded,
-                color: BillifyColors.primary,
+                color: ThemeController.to.primary,
                 bgColor: const Color(0xFFE8EAF6),
                 isWide: true,
                 onTap: () => _navTo(AppRoutes.clients),
@@ -615,7 +616,7 @@ class _HeaderBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      color: BillifyColors.primary,
+      color: ThemeController.to.primary,
       child: Stack(
         children: [
           Positioned.fill(child: CustomPaint(painter: _DashGridPainter())),
@@ -865,7 +866,7 @@ class _BarChartCard extends StatelessWidget {
   Widget _buildChartHeader() {
     return Row(
       children: [
-        Container(width: 3, height: 14, color: BillifyColors.primary),
+        Container(width: 3, height: 14, color: ThemeController.to.primary),
         const SizedBox(width: 8),
         Text(
           'CLIENT INCOME VS EXPENSE',
@@ -873,7 +874,7 @@ class _BarChartCard extends StatelessWidget {
             fontSize: 9,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.8,
-            color: BillifyColors.primary,
+            color: ThemeController.to.primary,
           ),
         ),
         const Spacer(),
@@ -1059,7 +1060,7 @@ class _RecentClientsSection extends StatelessWidget {
   Widget _buildSectionHeader() {
     return Row(
       children: [
-        Container(width: 3, height: 14, color: BillifyColors.primary),
+        Container(width: 3, height: 14, color: ThemeController.to.primary),
         const SizedBox(width: 8),
         Text(
           'RECENT CLIENT ACTIVITY',
@@ -1067,7 +1068,7 @@ class _RecentClientsSection extends StatelessWidget {
             fontSize: 9,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.8,
-            color: BillifyColors.primary,
+            color: ThemeController.to.primary,
           ),
         ),
         const Spacer(),
@@ -1079,7 +1080,7 @@ class _RecentClientsSection extends StatelessWidget {
               fontSize: 8,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.2,
-              color: BillifyColors.primary,
+              color: ThemeController.to.primary,
             ),
           ),
         ),
@@ -1341,7 +1342,7 @@ class _StatusPickerSheetState extends State<_StatusPickerSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(height: 3, color: BillifyColors.primary),
+            Container(height: 3, color: ThemeController.to.primary),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
               child: Column(
@@ -1354,7 +1355,7 @@ class _StatusPickerSheetState extends State<_StatusPickerSheet> {
                       fontSize: 10,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 2.0,
-                      color: BillifyColors.primary,
+                      color: ThemeController.to.primary,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1426,9 +1427,9 @@ class _StatusPickerSheetState extends State<_StatusPickerSheet> {
                   }),
                   const SizedBox(height: 8),
                   if (_saving)
-                    const Center(
+                    Center(
                         child: CircularProgressIndicator(
-                            color: BillifyColors.primary))
+                            color: ThemeController.to.primary))
                   else
                     ElevatedButton(
                       onPressed: _apply,

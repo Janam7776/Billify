@@ -20,6 +20,7 @@ import 'main.dart'
     BillifyC,
     BillifyDialog;
 import 'web_layout.dart' show WebScaffold;
+import 'theme_controller.dart' show ThemeController;
 
 // ════════════════════════════════════════════════════════════
 //  CONSTANTS
@@ -189,16 +190,16 @@ class _ExpenseListScreenState extends State<ExpenseListScreen>
           'EXPENSE LEDGER',
           style: GoogleFonts.poppins(
             fontSize: 11, fontWeight: FontWeight.w900,
-            letterSpacing: 2.0, color: BillifyColors.primary,
+            letterSpacing: 2.0, color: ThemeController.to.primary,
           ),
         ),
         bottom: TabBar(
           controller: _tabCtrl,
-          indicatorColor: BillifyColors.primary,
+          indicatorColor: ThemeController.to.primary,
           indicatorWeight: 2,
           labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 9, letterSpacing: 1.2),
           unselectedLabelStyle: GoogleFonts.poppins(fontSize: 9, letterSpacing: 1.0),
-          labelColor: BillifyColors.primary,
+          labelColor: ThemeController.to.primary,
           unselectedLabelColor: BillifyColors.textSecondary,
           indicatorSize: TabBarIndicatorSize.tab,
           tabs: const [
@@ -215,7 +216,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen>
           'ADD ENTRY',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
         ),
-        backgroundColor: BillifyColors.primary,
+        backgroundColor: ThemeController.to.primary,
         foregroundColor: const Color(0xFFF7F7FF),
         elevation: 0,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
@@ -225,9 +226,9 @@ class _ExpenseListScreenState extends State<ExpenseListScreen>
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting &&
               !snap.hasData) {
-            return const Center(
+            return Center(
               child:
-              CircularProgressIndicator(color: BillifyColors.primary),
+              CircularProgressIndicator(color: ThemeController.to.primary),
             );
           }
 
@@ -278,7 +279,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen>
       decoration: InputDecoration(
         hintText: 'SEARCH TITLE, CATEGORY, NOTE…',
         hintStyle: GoogleFonts.poppins(fontSize: 9, letterSpacing: 0.8, color: BillifyColors.outlineVariant),
-        prefixIcon: const Icon(Icons.search_rounded, color: BillifyColors.primary, size: 18),
+        prefixIcon: Icon(Icons.search_rounded, color: ThemeController.to.primary, size: 18),
         suffixIcon: _searchQuery.isNotEmpty
             ? IconButton(
           icon: const Icon(Icons.clear_rounded, size: 16, color: BillifyColors.textSecondary),
@@ -292,7 +293,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen>
         filled: true,
         border: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant, width: 0.5)),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.4), width: 0.5)),
-        focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: BillifyColors.primary, width: 1.5)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: ThemeController.to.primary, width: 1.5)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         isDense: true,
       ),
@@ -338,8 +339,8 @@ class _SummaryStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: BillifyColors.primary,
-        border: Border(bottom: BorderSide(color: BillifyColors.primaryDark, width: 1)),
+        color: ThemeController.to.primary,
+        border: Border(bottom: BorderSide(color: ThemeController.to.primaryDark, width: 1)),
       ),
       child: IntrinsicHeight(
         child: Row(
@@ -448,7 +449,7 @@ class _CategoryChips extends StatelessWidget {
               margin: const EdgeInsets.only(right: 2),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: active ? BillifyColors.primary : Colors.transparent,
+                color: active ? ThemeController.to.primary : Colors.transparent,
                 border: active ? null : Border.all(
                   color: BillifyColors.outlineVariant.withOpacity(0.4), width: 0.5,
                 ),
@@ -535,7 +536,7 @@ class _ExpenseCard extends StatelessWidget {
         const SizedBox(height: 3),
         Row(
           children: [
-            _Chip(label: entry.category, color: BillifyColors.primary),
+            _Chip(label: entry.category, color: ThemeController.to.primary),
             const SizedBox(width: 4),
             _Chip(label: entry.paymentMode, color: BillifyColors.textSecondary),
             if (entry.whoPaid.isNotEmpty) ...[
@@ -846,7 +847,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               : (_entry.type == 'income' ? 'ADD INCOME' : 'ADD EXPENSE'),
           style: GoogleFonts.poppins(
             fontSize: 11, fontWeight: FontWeight.w900,
-            letterSpacing: 2.0, color: BillifyColors.primary,
+            letterSpacing: 2.0, color: ThemeController.to.primary,
           ),
         ),
         bottom: PreferredSize(
@@ -954,9 +955,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           },
           decoration: InputDecoration(
             labelText: 'Amount (₹) *',
-            prefixIcon: const Icon(
+            prefixIcon: Icon(
               Icons.currency_rupee_rounded,
-              color: BillifyColors.primary,
+              color: ThemeController.to.primary,
             ),
             prefixText: '₹  ',
             prefixStyle: GoogleFonts.poppins(
@@ -996,14 +997,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
               color: active
-                  ? (isIncome ? BillifyColors.paid : BillifyColors.primary)
+                  ? (isIncome ? BillifyColors.paid : ThemeController.to.primary)
                   : Theme.of(context).cardColor,
               borderRadius: BorderRadius.zero,
               border: Border.all(
                 color: active
                     ? (isIncome
                     ? BillifyColors.paid
-                    : BillifyColors.primary)
+                    : ThemeController.to.primary)
                     : BillifyColors.divider,
               ),
               boxShadow: active
@@ -1011,7 +1012,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 BoxShadow(
                   color: (isIncome
                       ? BillifyColors.paid
-                      : BillifyColors.primary)
+                      : ThemeController.to.primary)
                       .withOpacity(0.2),
                   blurRadius: 6,
                 ),
@@ -1067,8 +1068,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           lastDate: DateTime(2035),
           builder: (ctx, child) => Theme(
             data: Theme.of(ctx).copyWith(
-              colorScheme: const ColorScheme.light(
-                primary: BillifyColors.primary,
+              colorScheme: ColorScheme.light(
+                primary: ThemeController.to.primary,
               ),
             ),
             child: child!,
@@ -1088,9 +1089,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         ),
         child: Row(
           children: [
-            const Icon(
+            Icon(
               Icons.calendar_today_rounded,
-              color: BillifyColors.primary,
+              color: ThemeController.to.primary,
               size: 18,
             ),
             const SizedBox(width: 10),
@@ -1114,9 +1115,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               ],
             ),
             const Spacer(),
-            const Icon(
+            Icon(
               Icons.edit_calendar_rounded,
-              color: BillifyColors.primary,
+              color: ThemeController.to.primary,
               size: 16,
             ),
           ],
@@ -1137,7 +1138,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             duration: const Duration(milliseconds: 120),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: active ? BillifyColors.primary : BillifyColors.surfaceLow,
+              color: active ? ThemeController.to.primary : BillifyColors.surfaceLow,
               border: active ? null : Border.all(
                 color: BillifyColors.outlineVariant.withOpacity(0.4), width: 0.5,
               ),
@@ -1185,7 +1186,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         Switch(
           value: _entry.isTaxable,
           onChanged: (v) => setState(() => _entry.isTaxable = v),
-          activeColor: BillifyColors.primary,
+          activeColor: ThemeController.to.primary,
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -1212,8 +1213,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero,
                     borderSide: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.5))),
-                focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero,
-                    borderSide: BorderSide(color: BillifyColors.primary, width: 2)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide(color: ThemeController.to.primary, width: 2)),
               ),
               style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 12),
             ),
@@ -1226,8 +1227,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: BillifyColors.primary.withOpacity(0.06),
-        border: Border(left: BorderSide(color: BillifyColors.primary, width: 2)),
+        color: ThemeController.to.primary.withOpacity(0.06),
+        border: Border(left: BorderSide(color: ThemeController.to.primary, width: 2)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1243,7 +1244,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             '${AppSettings.currency}${(_entry.amount * _entry.taxPercent / 100).toStringAsFixed(2)}',
             style: GoogleFonts.poppins(
               fontSize: 13, fontWeight: FontWeight.w900,
-              color: BillifyColors.primary, letterSpacing: -0.3,
+              color: ThemeController.to.primary, letterSpacing: -0.3,
             ),
           ),
         ],
@@ -1253,12 +1254,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   Widget _buildSaveButton(bool isIncome) {
     if (_saving) {
-      return const Center(child: CircularProgressIndicator(color: BillifyColors.primary));
+      return Center(child: CircularProgressIndicator(color: ThemeController.to.primary));
     }
     return ElevatedButton(
       onPressed: _save,
       style: ElevatedButton.styleFrom(
-        backgroundColor: isIncome ? BillifyColors.paid : BillifyColors.primary,
+        backgroundColor: isIncome ? BillifyColors.paid : ThemeController.to.primary,
         minimumSize: const Size(double.infinity, 52),
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         elevation: 0,
@@ -1285,7 +1286,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
-          prefixIcon: Icon(icon, color: BillifyColors.primary),
+          prefixIcon: Icon(icon, color: ThemeController.to.primary),
           alignLabelWithHint: lines > 1,
         ),
       );
@@ -1318,20 +1319,20 @@ class _FormCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: BillifyColors.primary.withOpacity(0.06),
+              color: ThemeController.to.primary.withOpacity(0.06),
               border: Border(bottom: BorderSide(color: BillifyColors.outlineVariant.withOpacity(0.3), width: 0.5)),
             ),
             child: Row(
               children: [
-                Container(width: 3, height: 12, color: BillifyColors.primary),
+                Container(width: 3, height: 12, color: ThemeController.to.primary),
                 const SizedBox(width: 8),
-                Icon(icon, size: 13, color: BillifyColors.primary),
+                Icon(icon, size: 13, color: ThemeController.to.primary),
                 const SizedBox(width: 6),
                 Text(
                   title.toUpperCase(),
                   style: GoogleFonts.poppins(
                     fontSize: 9, fontWeight: FontWeight.w800,
-                    letterSpacing: 1.5, color: BillifyColors.primary,
+                    letterSpacing: 1.5, color: ThemeController.to.primary,
                   ),
                 ),
               ],
