@@ -161,7 +161,7 @@ class ClientExportService {
       xl.Sheet sheet, List<ClientModel> clients, String title) {
 
     // ── Column widths  A     B      C      D      E      F      G      H      I      J
-    const widths =    [4.5, 24.0,  15.0,  17.0,  18.0,  20.0,  15.0,  15.0,  13.0,  17.0];
+    const widths =    [5.5, 26.0,  15.0,  18.0,  20.0,  22.0,  15.0,  16.0,  14.0,  18.0];
     for (var i = 0; i < widths.length; i++) {
       sheet.setColumnWidth(i, widths[i]);
     }
@@ -183,35 +183,29 @@ class ClientExportService {
     // ═══════════════════════════════════════════════════════
 
     // Row 0 — title
-    sheet.setRowHeight(row, 36);
-    // FIX-B1: no _exFill — _exCell calls cover all 10 cols directly
-    // FIX-B2: rowHeight param removed from _exCell (unused/dead); height set by setRowHeight above
-    _exCell(sheet, row, 0, value: '', bgColor: _exBrandGreen);       // green accent column
-    _exCell(sheet, row, 1, value: 'BILLIFY',
-        bold: true, fontSize: 18, fgColor: _exBrandGreenFg,
+    sheet.setRowHeight(row, 40);
+    _exCell(sheet, row, 0, value: '', bgColor: _exBrandGreen);
+    _exMerge(sheet, row, 1, row, 5);
+    _exCell(sheet, row, 1, value: '  BILLIFY',
+        bold: true, fontSize: 20, fgColor: _exBrandGreenFg,
         bgColor: _exHeaderBg, halign: xl.HorizontalAlign.Left);
-    for (var c = 2; c <= 7; c++) {
-      _exCell(sheet, row, c, value: '', bgColor: _exHeaderBg);
-    }
-    _exCell(sheet, row, 8, value: title,
+    _exMerge(sheet, row, 6, row, 9);
+    _exCell(sheet, row, 6, value: title,
         italic: true, fontSize: 9, fgColor: 'FFAAAAAA',
         bgColor: _exHeaderBg, halign: xl.HorizontalAlign.Right);
-    _exCell(sheet, row, 9, value: '', bgColor: _exHeaderBg);
     row++;
 
     // Row 1 — subtitle / timestamp
-    sheet.setRowHeight(row, 18);
+    sheet.setRowHeight(row, 20);
     _exCell(sheet, row, 0, value: '', bgColor: _exBrandGreen);
+    _exMerge(sheet, row, 1, row, 5);
     _exCell(sheet, row, 1, value: 'Client Management Report',
-        italic: true, fontSize: 8, fgColor: 'FF888888', bgColor: _exHeaderBg);
-    for (var c = 2; c <= 7; c++) {
-      _exCell(sheet, row, c, value: '', bgColor: _exHeaderBg);
-    }
-    _exCell(sheet, row, 8,
+        italic: true, fontSize: 9, fgColor: 'FF888888', bgColor: _exHeaderBg);
+    _exMerge(sheet, row, 6, row, 9);
+    _exCell(sheet, row, 6,
         value: 'Generated: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now())}',
         italic: true, fontSize: 8, fgColor: 'FF666666',
         bgColor: _exHeaderBg, halign: xl.HorizontalAlign.Right);
-    _exCell(sheet, row, 9, value: '', bgColor: _exHeaderBg);
     row++;
 
     // blank spacer row
@@ -222,181 +216,80 @@ class ClientExportService {
     row++;
 
     // ═══════════════════════════════════════════════════════
-    // SECTION 1 — SUMMARY (cols 0–4) | PAYMENT STATUS (cols 5–9)
+    // ═══════════════════════════════════════════════════════
+    // SECTION 1 — KPI CARDS  (5 cards across A:J, 2 cols each)
     //
-    // Visual layout per row:
-    //  ┌─────────────────────┬─────────────────────┐
-    //  │ SUMMARY STATISTICS  │  PAYMENT STATUS      │
-    //  │ Metric        Value │  Status  Count   %   │
-    //  │ Total Clients    12 │  Completed  8  66.7% │
-    //  │ Total Revenue  …   │  Advance    2  16.7% │
-    //  │ Total Reels     18 │  Pending    1   8.3% │
-    //  │                    │  Overdue    1   8.3% │
-    //  └─────────────────────┴─────────────────────┘
+    //  Each card (2 cols wide):
+    //   Row +0 (h=4):  solid colour top accent bar
+    //   Row +1 (h=36): big value, bold, font 18
+    //   Row +2 (h=18): small muted label
+    //   Row +3 (h=8):  bottom padding
+    //
+    //  Cards: Clients | Revenue | Reels | Completed% | At Risk
     // ═══════════════════════════════════════════════════════
 
-    // ── Panel heading row ──────────────────────────────────
-    sheet.setRowHeight(row, 22);
+    final completedPct = clients.isEmpty
+        ? '0%'
+        : '${(completed / clients.length * 100).toStringAsFixed(0)}%';
+    final atRisk = pending + overdue;
 
-    // Left panel heading: SUMMARY STATISTICS (cols 0–4)
-    // FIX-B4/B5: add bottomBorder on heading + topBorderThick on sub-header
-    // to ensure clean separator. Use border:true so all 4 sides are set,
-    // then thick overrides apply on outer edges.
-    _exCell(sheet, row, 0, value: '  SUMMARY STATISTICS',
-        bold: true, fontSize: 9, fgColor: _exBrandGreenFg,
-        bgColor: _exBrandGreen, halign: xl.HorizontalAlign.Left,
-        border: true, topBorderThick: true, leftBorderThick: true);
-    for (var c = 1; c <= 3; c++) {
-      _exCell(sheet, row, c, value: '', bgColor: _exBrandGreen,
-          border: true, topBorderThick: true);
-    }
-    _exCell(sheet, row, 4, value: '', bgColor: _exBrandGreen,
-        border: true, topBorderThick: true, rightBorderThick: true);
+    // [startCol, endCol, accentHex, bgHex, value, label, valueFgHex]
+    final cards = <List<dynamic>>[
+      [0, 1, _exBrandGreen, 'FFF0FAF1', clients.length.toString(),  'TOTAL CLIENTS',   _exBrandGreen],
+      [2, 3, 'FF1565C0',    'FFE8F0FE', _rupeesInt(totalRevenue),   'TOTAL REVENUE',   'FF1565C0'   ],
+      [4, 5, 'FF00838F',    'FFE0F7FA', totalReels.toString(),       'TOTAL REELS',     'FF00838F'   ],
+      [6, 7, 'FF2E7D32',    'FFE8F5E9', completedPct,               'COMPLETION RATE', 'FF2E7D32'   ],
+      [8, 9, 'FFE65100',    'FFFFF3E0', atRisk.toString(),           'AT RISK',         'FFE65100'   ],
+    ];
 
-    // Right panel heading: PAYMENT STATUS (cols 5–9)
-    _exCell(sheet, row, 5, value: '  PAYMENT STATUS',
-        bold: true, fontSize: 9, fgColor: _exBrandGreenFg,
-        bgColor: _exHeaderBg, halign: xl.HorizontalAlign.Left,
-        border: true, topBorderThick: true, leftBorderThick: true);
-    for (var c = 6; c <= 8; c++) {
-      _exCell(sheet, row, c, value: '', bgColor: _exHeaderBg,
-          border: true, topBorderThick: true);
+    // Row A: coloured accent top bar (h=4)
+    sheet.setRowHeight(row, 4);
+    for (final card in cards) {
+      final c0 = card[0] as int; final c1 = card[1] as int;
+      _exMerge(sheet, row, c0, row, c1);
+      _exCell(sheet, row, c0, value: '', bgColor: card[2] as String,
+          topBorderThick: true,
+          leftBorderThick: c0 == 0, rightBorderThick: c1 == 9);
     }
-    _exCell(sheet, row, 9, value: '', bgColor: _exHeaderBg,
-        border: true, topBorderThick: true, rightBorderThick: true);
     row++;
 
-    // ── Sub-header labels ──────────────────────────────────
-    // FIX-B5: topBorderThick to create clean separator from panel heading above
+    // Row B: big value (h=36)
+    sheet.setRowHeight(row, 36);
+    for (final card in cards) {
+      final c0 = card[0] as int; final c1 = card[1] as int;
+      _exMerge(sheet, row, c0, row, c1);
+      _exCell(sheet, row, c0,
+          value: card[4] as String,
+          bold: true, fontSize: 18,
+          fgColor: card[6] as String, bgColor: card[3] as String,
+          halign: xl.HorizontalAlign.Center,
+          border: true,
+          leftBorderThick: c0 == 0, rightBorderThick: c1 == 9);
+    }
+    row++;
+
+    // Row C: small label (h=18)
     sheet.setRowHeight(row, 18);
-    _exCell(sheet, row, 0, value: 'Metric',
-        bold: true, fontSize: 8, fgColor: 'FFAAAAAA',
-        bgColor: 'FF242438', halign: xl.HorizontalAlign.Left,
-        border: true, topBorderThick: true, leftBorderThick: true);
-    for (var c = 1; c <= 3; c++) {
-      _exCell(sheet, row, c, value: '', bgColor: 'FF242438',
-          border: true, topBorderThick: true);
+    for (final card in cards) {
+      final c0 = card[0] as int; final c1 = card[1] as int;
+      _exMerge(sheet, row, c0, row, c1);
+      _exCell(sheet, row, c0,
+          value: card[5] as String,
+          fontSize: 7, fgColor: 'FF888888', bgColor: card[3] as String,
+          halign: xl.HorizontalAlign.Center,
+          border: true,
+          leftBorderThick: c0 == 0, rightBorderThick: c1 == 9);
     }
-    _exCell(sheet, row, 4, value: 'Value',
-        bold: true, fontSize: 8, fgColor: 'FFAAAAAA',
-        bgColor: 'FF242438', halign: xl.HorizontalAlign.Right,
-        border: true, topBorderThick: true, rightBorderThick: true);
-
-    _exCell(sheet, row, 5, value: 'Status',
-        bold: true, fontSize: 8, fgColor: 'FFAAAAAA',
-        bgColor: 'FF242438', halign: xl.HorizontalAlign.Left,
-        border: true, topBorderThick: true, leftBorderThick: true);
-    _exCell(sheet, row, 6, value: '', bgColor: 'FF242438',
-        border: true, topBorderThick: true);
-    _exCell(sheet, row, 7, value: 'Count',
-        bold: true, fontSize: 8, fgColor: 'FFAAAAAA',
-        bgColor: 'FF242438', halign: xl.HorizontalAlign.Center,
-        border: true, topBorderThick: true);
-    _exCell(sheet, row, 8, value: '%',
-        bold: true, fontSize: 8, fgColor: 'FFAAAAAA',
-        bgColor: 'FF242438', halign: xl.HorizontalAlign.Center,
-        border: true, topBorderThick: true);
-    _exCell(sheet, row, 9, value: '',
-        bgColor: 'FF242438',
-        border: true, topBorderThick: true, rightBorderThick: true);
     row++;
 
-    // ── KPI + Status data rows ─────────────────────────────
-    // Left  has 3 KPI rows, Right has 4 status rows → max=4.
-    // When left panel runs out (i>=3) we still draw bordered empty cells
-    // so the right-panel box doesn't have a gap on the left side.
-    final kpis = [
-      ['Total Clients', clients.length.toString(), null          ],
-      ['Total Revenue', _rupeesInt(totalRevenue),  totalRevenue  ],
-      ['Total Reels',   totalReels.toString(),      null          ],
-    ];
-    final statRows = [
-      ['Completed', completed, _exCompleted, 'FF1B5E20'],
-      ['Advance',   advance,   _exAdvance,   'FF0D47A1'],
-      ['Pending',   pending,   _exPending,   'FFB71C1C'],
-      ['Overdue',   overdue,   _exOverdue,   'FFBf360C'],
-    ];
-    const maxKpiStatRows = 4; // always 4 — driven by status count
-
-    for (var i = 0; i < maxKpiStatRows; i++) {
-      sheet.setRowHeight(row, 20);
-      final isAlt = i.isOdd;
-      final lBg   = isAlt ? _exAltRow : 'FFFFFFFF';
-
-      // Left panel (cols 0–4)
-      if (i < kpis.length) {
-        final kpi    = kpis[i];
-        final numVal = kpi[2] as double?;
-        _exCell(sheet, row, 0, value: '', bgColor: lBg,
-            border: true, leftBorderThick: true);
-        // Cols 1–3: label text spans visually; 1 holds label, 2–3 empty same bg
-        _exCell(sheet, row, 1, value: kpi[0] as String,
-            bgColor: lBg, border: true, halign: xl.HorizontalAlign.Left);
-        _exCell(sheet, row, 2, value: '', bgColor: lBg, border: true);
-        _exCell(sheet, row, 3, value: '', bgColor: lBg, border: true);
-        // Col 4: value, stored as real number when numeric
-        _exCell(sheet, row, 4,
-            value: kpi[1] as String,
-            numericValue: numVal,
-            bold: true, fontSize: 10,
-            bgColor: lBg, border: true,
-            rightBorderThick: true,
-            halign: xl.HorizontalAlign.Right);
-      } else {
-        // empty filler so left-panel border stays intact
-        _exCell(sheet, row, 0, value: '', bgColor: lBg,
-            border: true, leftBorderThick: true);
-        for (var c = 1; c <= 3; c++) {
-          _exCell(sheet, row, c, value: '', bgColor: lBg, border: true);
-        }
-        _exCell(sheet, row, 4, value: '', bgColor: lBg,
-            border: true, rightBorderThick: true);
-      }
-
-      // Right panel (cols 5–9)
-      final s   = statRows[i];
-      final sBg = s[2] as String;
-      final sFg = s[3] as String;
-      final cnt = s[1] as int;
-      _exCell(sheet, row, 5, value: '', bgColor: sBg,
-          border: true, leftBorderThick: true);
-      _exCell(sheet, row, 6,
-          value: s[0] as String,
-          bold: true, fontSize: 9,
-          fgColor: sFg, bgColor: sBg,
-          border: true, halign: xl.HorizontalAlign.Left);
-      // FIX-B6: numericValue always passed when storing a number;
-      // isInt removed — use DoubleCellValue + '#,##0' format for all numerics
-      _exCell(sheet, row, 7,
-          value: cnt.toString(),
-          numericValue: cnt.toDouble(),
-          bold: true, fontSize: 10,
-          bgColor: sBg, border: true,
-          halign: xl.HorizontalAlign.Center);
-      _exCell(sheet, row, 8,
-          value: _pct(cnt, clients.length),
-          bgColor: sBg, border: true,
-          halign: xl.HorizontalAlign.Center);
-      _exCell(sheet, row, 9, value: '', bgColor: sBg,
-          border: true, rightBorderThick: true);
-      row++;
-    }
-
-    // Bottom closing bar of both panels
-    sheet.setRowHeight(row, 5);
-    for (var c = 0; c <= 4; c++) {
-      _exCell(sheet, row, c, value: '',
-          bgColor: _exBrandGreen,
-          topBorderThick: true,
-          leftBorderThick: c == 0,
-          rightBorderThick: c == 4);
-    }
-    for (var c = 5; c <= 9; c++) {
-      _exCell(sheet, row, c, value: '',
-          bgColor: _exHeaderBg,
-          topBorderThick: true,
-          leftBorderThick: c == 5,
-          rightBorderThick: c == 9);
+    // Row D: bottom padding (h=8)
+    sheet.setRowHeight(row, 8);
+    for (final card in cards) {
+      final c0 = card[0] as int; final c1 = card[1] as int;
+      _exMerge(sheet, row, c0, row, c1);
+      _exCell(sheet, row, c0, value: '', bgColor: card[3] as String,
+          border: true,
+          leftBorderThick: c0 == 0, rightBorderThick: c1 == 9);
     }
     row++;
 
@@ -470,16 +363,15 @@ class ClientExportService {
       _exCell(sheet, row, 6,
           value: c.primaryReel.displayPaymentType,
           fontSize: 8, bgColor: bg, border: true);
-      // FIX-B6/B8: store as DoubleCellValue, format '#,##0' → integer display, no truncation
       _exCell(sheet, row, 7,
           value: _rupeesInt(c.totalPaymentAmount),
           numericValue: c.totalPaymentAmount,
-          bold: true, fontSize: 9,
+          bold: true, fontSize: 9, isCurrency: true,
           fgColor: _exBrandGreen, bgColor: bg,
           border: true, halign: xl.HorizontalAlign.Right);
       _exCell(sheet, row, 8,
           value: _statusLabel(c.paymentStatus).toUpperCase(),
-          bold: true, fontSize: 7.5,
+          bold: true, fontSize: 8,
           fgColor: sFg, bgColor: sBg,
           border: true, halign: xl.HorizontalAlign.Center);
       _exCell(sheet, row, 9,
@@ -491,24 +383,25 @@ class ClientExportService {
 
     // Grand total row
     final total = clients.fold<double>(0, (s, c) => s + c.totalPaymentAmount);
-    sheet.setRowHeight(row, 22);
+    sheet.setRowHeight(row, 24);
     _exCell(sheet, row, 0, value: '',
         bgColor: _exBrandGreen,
         border: true, topBorderThick: true, leftBorderThick: true);
     _exCell(sheet, row, 1,
-        value: 'GRAND TOTAL  —  ${clients.length} clients',
-        bold: true, fontSize: 9, fgColor: _exBrandGreenFg,
+        value: '  GRAND TOTAL  —  ${clients.length} clients',
+        bold: true, fontSize: 10, fgColor: _exBrandGreenFg,
         bgColor: _exBrandGreen,
         border: true, topBorderThick: true,
         halign: xl.HorizontalAlign.Left);
-    for (var c = 2; c <= 6; c++) {
-      _exCell(sheet, row, c, value: '',
-          bgColor: _exBrandGreen, border: true, topBorderThick: true);
-    }
+    _exCell(sheet, row, 2, value: '', bgColor: _exBrandGreen, border: true, topBorderThick: true);
+    _exCell(sheet, row, 3, value: '', bgColor: _exBrandGreen, border: true, topBorderThick: true);
+    _exCell(sheet, row, 4, value: '', bgColor: _exBrandGreen, border: true, topBorderThick: true);
+    _exCell(sheet, row, 5, value: '', bgColor: _exBrandGreen, border: true, topBorderThick: true);
+    _exCell(sheet, row, 6, value: '', bgColor: _exBrandGreen, border: true, topBorderThick: true);
     _exCell(sheet, row, 7,
         value: _rupeesInt(total),
         numericValue: total,
-        bold: true, fontSize: 10, fgColor: _exBrandGreenFg,
+        bold: true, fontSize: 11, isCurrency: true, fgColor: _exBrandGreenFg,
         bgColor: _exBrandGreen,
         border: true, topBorderThick: true,
         halign: xl.HorizontalAlign.Right);
@@ -592,12 +485,12 @@ class ClientExportService {
         _exCell(sheet, row, 6,
             value: _rupeesInt(reel.paymentAmount),
             numericValue: reel.paymentAmount,
-            bold: true, fontSize: 9,
+            bold: true, fontSize: 9, isCurrency: true,
             fgColor: _exBrandGreen, bgColor: bg,
             border: true, halign: xl.HorizontalAlign.Right);
         _exCell(sheet, row, 7,
             value: _statusLabel(reel.paymentStatus).toUpperCase(),
-            bold: true, fontSize: 7.5,
+            bold: true, fontSize: 8,
             fgColor: sFg, bgColor: sBg,
             border: true, halign: xl.HorizontalAlign.Center);
         _exCell(sheet, row, 8,
@@ -614,7 +507,7 @@ class ClientExportService {
     }
 
     // Closing accent bar — caps the reel table bottom edge
-    sheet.setRowHeight(row, 5);
+    sheet.setRowHeight(row, 6);
     for (var c = 0; c < 10; c++) {
       _exCell(sheet, row, c, value: '',
           bgColor: _exHeaderBg,
@@ -652,9 +545,6 @@ class ClientExportService {
   }
 
   // ── Excel cell builder ─────────────────────────────────────
-  // FIX-B1: removed _exFill (was redundant — always overwritten by _exCell)
-  // FIX-B2: removed dead rowHeight param (setRowHeight called at call site)
-  // FIX-B7: _exFill removed entirely; inline bgColor loops used instead
   static void _exCell(
       xl.Sheet sheet,
       int rowIdx,
@@ -671,10 +561,8 @@ class ClientExportService {
         bool leftBorderThick  = false,
         bool rightBorderThick = false,
         xl.HorizontalAlign halign = xl.HorizontalAlign.Left,
-        // FIX-B6/B8: numericValue always uses DoubleCellValue.
-        // isInt removed — use format code '#,##0' for all numerics so
-        // Excel shows integers with comma separators but stores full precision.
         double? numericValue,
+        bool isCurrency       = false,
       }) {
     final cell = sheet.cell(xl.CellIndex.indexByColumnRow(
         columnIndex: colIdx, rowIndex: rowIdx));
@@ -686,10 +574,11 @@ class ClientExportService {
       cell.value = xl.TextCellValue(value);
     }
 
-    // FIX-B6: numFmt now correctly applies '#,##0' for ALL numeric cells
-    // (previously the condition `&& !isInt` meant it NEVER applied)
+    // Use rupee format for currency cells, plain integer format for counts
     final numFmt = numericValue != null
-        ? xl.CustomNumericNumFormat(formatCode: '#,##0')
+        ? (isCurrency
+        ? xl.CustomNumericNumFormat(formatCode: r'₹#,##,##0;(₹#,##,##0)')
+        : xl.CustomNumericNumFormat(formatCode: '#,##0'))
         : xl.NumFormat.standard_0;
 
     final textColor = fgColor ?? color ?? 'FF212121';
