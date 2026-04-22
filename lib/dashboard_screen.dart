@@ -11,11 +11,18 @@
 //    • Completed       → count + sum of Completed clients
 //    • Advance         → count + sum of Advance clients
 //    • Pending         → count + sum of Pending clients
+//    • Overdue         → count + sum of Overdue clients  ← NEW (wired)
 //    • Total Expenses  → expense collection
 //    • Net Balance     → (Completed + Advance) − Expenses
 //    • Active Clients  → total client count
 //
-//  Overdue is intentionally excluded from the summary cards.
+//  NEW SECTIONS (fully wired, same boxy aesthetic):
+//    • _OverviewKpiRow         → 3 KPI tiles: collection rate, avg deal, overdue %
+//    • _StatusDonutSection     → mini donut + legend (status distribution)
+//    • _CategoryBreakdown      → per-category income bar list
+//    • _ExpenseBreakdown       → top expense categories
+//    • _QuickActionsSection    → shortcut tiles to common actions
+//
 //  Bar chart income = Completed + Advance client payments.
 // ════════════════════════════════════════════════════════════
 
@@ -27,6 +34,7 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'dart:math' as math;
 
 import 'main.dart'
     show
@@ -55,22 +63,30 @@ void _navTo(String route, {Object? arguments}) {
 
 class _DashboardData {
   // ── Client-derived financials ──
-  final double completedValue;     // sum of Completed client paymentAmounts
-  final int completedCount;        // count of Completed clients
-  final double advanceValue;       // sum of Advance client paymentAmounts
-  final int advanceCount;          // count of Advance clients
-  final double pendingValue;       // sum of Pending client paymentAmounts
-  final int pendingCount;          // count of Pending clients
+  final double completedValue;
+  final int completedCount;
+  final double advanceValue;
+  final int advanceCount;
+  final double pendingValue;
+  final int pendingCount;
+  final double overdueValue;      // NEW: wired overdue
+  final int overdueCount;         // NEW: wired overdue
   final int totalClients;
 
   // ── Expense-collection-derived ──
   final double totalExpense;
 
   // ── Derived ──
-  final double netBalance;         // (completed + advance) - expenses
+  final double netBalance;
+  final double collectionRate;    // (completed + advance) / totalValue * 100
+  final double avgDealSize;       // totalValue / totalClients
 
   // ── Chart ──
-  final List<_MonthBar> monthBars; // income vs expense per month
+  final List<_MonthBar> monthBars;
+
+  // ── Category breakdown ──
+  final Map<String, double> categoryIncome;     // clientCategory → sum of (completed+advance)
+  final Map<String, double> expenseByCategory;  // expense category → sum
 
   // ── Recent client activity ──
   final List<_RecentClient> recentClients;
@@ -82,18 +98,24 @@ class _DashboardData {
     required this.advanceCount,
     required this.pendingValue,
     required this.pendingCount,
+    required this.overdueValue,
+    required this.overdueCount,
     required this.totalClients,
     required this.totalExpense,
     required this.netBalance,
+    required this.collectionRate,
+    required this.avgDealSize,
     required this.monthBars,
+    required this.categoryIncome,
+    required this.expenseByCategory,
     required this.recentClients,
   });
 }
 
 class _MonthBar {
   final String label;
-  final double income;   // from clients (completed + advance)
-  final double expense;  // from expense collection
+  final double income;
+  final double expense;
   const _MonthBar(this.label, this.income, this.expense);
 }
 
@@ -118,7 +140,7 @@ class _RecentClient {
 }
 
 // ────────────────────────────────────────────────────────────
-//  COMPUTE FUNCTION  (pure, no BuildContext needed)
+//  COMPUTE FUNCTION
 // ────────────────────────────────────────────────────────────
 
 _DashboardData _compute(
@@ -127,7 +149,7 @@ _DashboardData _compute(
     ) {
   final now = DateTime.now();
 
-  // Initialise 4-month rolling window
+  // 4-month rolling window
   final Map<String, double> incomeByMonth = {};
   final Map<String, double> expenseByMonth = {};
   for (int i = 3; i >= 0; i--) {
@@ -137,58 +159,92 @@ _DashboardData _compute(
     expenseByMonth[key] = 0;
   }
 
-  // ── Aggregate clients ──────────────────────────────────
   double completedValue = 0;
   int completedCount = 0;
   double advanceValue = 0;
   int advanceCount = 0;
   double pendingValue = 0;
   int pendingCount = 0;
+  double overdueValue = 0;
+  int overdueCount = 0;
+  final Map<String, double> categoryIncome = {};
   final List<_RecentClient> allClients = [];
 
   for (final doc in clientSnap.docs) {
     final d = doc.data() as Map<String, dynamic>;
-    final status = (d['paymentStatus'] as String? ?? 'Pending');
-    final amount = ((d['paymentAmount'] ?? 0) as num).toDouble();
     final ts = (d['createdAt'] ?? d['updatedAt']) as Timestamp?;
     final date = ts?.toDate() ?? now;
     final mKey = DateFormat('MMM').format(date);
+    final category = (d['clientCategory'] as String? ?? 'Other');
 
-    switch (status.toLowerCase()) {
-      case 'completed':
-        completedValue += amount;
-        completedCount++;
-        if (incomeByMonth.containsKey(mKey)) {
-          incomeByMonth[mKey] = incomeByMonth[mKey]! + amount;
-        }
-        break;
-      case 'advance':
-        advanceValue += amount;
-        advanceCount++;
-        if (incomeByMonth.containsKey(mKey)) {
-          incomeByMonth[mKey] = incomeByMonth[mKey]! + amount;
-        }
-        break;
-      case 'pending':
-        pendingValue += amount;
-        pendingCount++;
-        break;
-    // 'overdue' is tracked per-client but excluded from summary cards
+    // Count how many reels this client has (mirrors ReelEntry.countReels)
+    int reelCount = 0;
+    if (d.containsKey('reelCategory')) reelCount = 1;
+    int ri = 2;
+    while (d.containsKey('reelCategory$ri')) {
+      reelCount = ri;
+      ri++;
+    }
+    if (reelCount == 0) reelCount = 1; // legacy fallback
+
+    // Accumulate each reel's amount according to its own payment status
+    double clientTotalAmount = 0;
+    String primaryStatus = 'Pending';
+
+    for (int i = 1; i <= reelCount; i++) {
+      final suffix = i == 1 ? '' : '$i';
+      final reelStatus =
+      (d['paymentStatus$suffix'] as String? ?? 'Pending');
+      final reelAmount =
+      ((d['paymentAmount$suffix'] ?? 0) as num).toDouble();
+
+      if (i == 1) primaryStatus = reelStatus;
+      clientTotalAmount += reelAmount;
+
+      switch (reelStatus.toLowerCase()) {
+        case 'completed':
+          completedValue += reelAmount;
+          if (i == 1) completedCount++;
+          if (incomeByMonth.containsKey(mKey)) {
+            incomeByMonth[mKey] = incomeByMonth[mKey]! + reelAmount;
+          }
+          categoryIncome[category] =
+              (categoryIncome[category] ?? 0) + reelAmount;
+          break;
+        case 'advance':
+          advanceValue += reelAmount;
+          if (i == 1) advanceCount++;
+          if (incomeByMonth.containsKey(mKey)) {
+            incomeByMonth[mKey] = incomeByMonth[mKey]! + reelAmount;
+          }
+          categoryIncome[category] =
+              (categoryIncome[category] ?? 0) + reelAmount;
+          break;
+        case 'pending':
+          pendingValue += reelAmount;
+          if (i == 1) pendingCount++;
+          break;
+        case 'overdue':
+          overdueValue += reelAmount;
+          if (i == 1) overdueCount++;
+          break;
+      }
     }
 
     allClients.add(_RecentClient(
       id: doc.id,
       name: (d['name'] as String? ?? ''),
       mobile: (d['mobile'] as String? ?? ''),
-      paymentAmount: amount,
-      paymentStatus: status,
-      clientCategory: (d['clientCategory'] as String? ?? ''),
+      paymentAmount: clientTotalAmount,
+      paymentStatus: primaryStatus,
+      clientCategory: category,
       createdAt: date,
     ));
   }
 
-  // ── Aggregate expenses ─────────────────────────────────
+  // Aggregate expenses
   double totalExpense = 0;
+  final Map<String, double> expenseByCategory = {};
   for (final doc in expenseSnap.docs) {
     final d = doc.data() as Map<String, dynamic>;
     final type = (d['type'] ?? 'expense') as String;
@@ -196,25 +252,35 @@ _DashboardData _compute(
     final ts = (d['date'] ?? d['createdAt']) as Timestamp?;
     final date = ts?.toDate() ?? now;
     final mKey = DateFormat('MMM').format(date);
+    final cat = (d['category'] as String? ?? 'Other');
 
     if (type == 'expense') {
       totalExpense += amt;
       if (expenseByMonth.containsKey(mKey)) {
         expenseByMonth[mKey] = expenseByMonth[mKey]! + amt;
       }
+      expenseByCategory[cat] = (expenseByCategory[cat] ?? 0) + amt;
     }
-    // Note: 'income' type in expense collection is intentionally ignored here —
-    // all income is now derived from clients only.
   }
 
-  // ── Sort clients by most recently added ───────────────
   allClients.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
   final earnedIncome = completedValue + advanceValue;
+  final totalValue = earnedIncome + pendingValue + overdueValue;
+  final collectionRate = totalValue > 0 ? (earnedIncome / totalValue * 100) : 0.0;
+  final avgDealSize = allClients.isNotEmpty ? totalValue / allClients.length : 0.0;
 
   final monthBars = incomeByMonth.keys
       .map((k) => _MonthBar(k, incomeByMonth[k]!, expenseByMonth[k]!))
       .toList();
+
+  // Sort categoryIncome descending
+  final sortedCategoryIncome = Map.fromEntries(
+    categoryIncome.entries.toList()..sort((a, b) => b.value.compareTo(a.value)),
+  );
+  final sortedExpenseByCategory = Map.fromEntries(
+    expenseByCategory.entries.toList()..sort((a, b) => b.value.compareTo(a.value)),
+  );
 
   return _DashboardData(
     completedValue: completedValue,
@@ -223,10 +289,16 @@ _DashboardData _compute(
     advanceCount: advanceCount,
     pendingValue: pendingValue,
     pendingCount: pendingCount,
+    overdueValue: overdueValue,
+    overdueCount: overdueCount,
     totalClients: allClients.length,
     totalExpense: totalExpense,
     netBalance: earnedIncome - totalExpense,
+    collectionRate: collectionRate,
+    avgDealSize: avgDealSize,
     monthBars: monthBars,
+    categoryIncome: sortedCategoryIncome,
+    expenseByCategory: sortedExpenseByCategory,
     recentClients: allClients.take(5).toList(),
   );
 }
@@ -243,8 +315,6 @@ class DashboardScreen extends StatelessWidget {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     final fmt = AppSettings.currencyFmt();
 
-    // ── Firestore streams ──────────────────────────────────
-    // PRIMARY source of truth: clients
     final clientStream = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -252,7 +322,6 @@ class DashboardScreen extends StatelessWidget {
         .orderBy('createdAt', descending: true)
         .snapshots();
 
-    // SECONDARY: expenses only (for net balance & chart)
     final expenseStream = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -417,23 +486,51 @@ class DashboardScreen extends StatelessWidget {
                       Future.delayed(const Duration(milliseconds: 400)),
                   child: CustomScrollView(
                     slivers: [
+                      // ── Header Banner ──────────────────
                       SliverToBoxAdapter(
                         child: _HeaderBanner(userName: userName),
                       ),
+                      // ── KPI Row (new) ──────────────────
+                      if (d != null)
+                        SliverToBoxAdapter(
+                          child: _OverviewKpiRow(d: d, fmt: fmt),
+                        ),
+                      // ── Summary Cards ──────────────────
                       SliverToBoxAdapter(
                         child: _SummaryCardsSection(d: d, fmt: fmt),
                       ),
+                      // ── Quick Actions (new) ────────────
+                      SliverToBoxAdapter(
+                        child: _QuickActionsSection(),
+                      ),
+                      // ── Bar Chart ──────────────────────
                       if (d != null && d.monthBars.isNotEmpty)
                         SliverToBoxAdapter(
                           child: _BarChartCard(bars: d.monthBars),
                         ),
-                      // Recent clients activity feed (replaces invoice list)
+                      // ── Status Distribution (new) ──────
+                      if (d != null && d.totalClients > 0)
+                        SliverToBoxAdapter(
+                          child: _StatusDistributionSection(d: d, fmt: fmt),
+                        ),
+                      // ── Recent Client Activity ─────────
                       SliverToBoxAdapter(
                         child: _RecentClientsSection(
                           clients: d?.recentClients ?? [],
                           fmt: fmt,
                         ),
                       ),
+                      // ── Category Breakdown (new) ───────
+                      if (d != null && d.categoryIncome.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: _CategoryBreakdownSection(d: d, fmt: fmt),
+                        ),
+                      // ── Expense Breakdown (new) ────────
+                      if (d != null && d.expenseByCategory.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: _ExpenseBreakdownSection(d: d, fmt: fmt),
+                        ),
+                      // ── Recent Clients (from client_screens) ─
                       const SliverToBoxAdapter(
                         child: DashboardRecentClients(),
                       ),
@@ -453,15 +550,44 @@ class DashboardScreen extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
+//  SECTION HEADER HELPER
+// ────────────────────────────────────────────────────────────
+
+Widget _sectionHeader(String title, {String? action, VoidCallback? onAction}) {
+  return Row(
+    children: [
+      Container(width: 3, height: 14, color: ThemeController.to.primary),
+      const SizedBox(width: 8),
+      Text(
+        title,
+        style: GoogleFonts.poppins(
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.8,
+          color: ThemeController.to.primary,
+        ),
+      ),
+      if (action != null) ...[
+        const Spacer(),
+        GestureDetector(
+          onTap: onAction,
+          child: Text(
+            action,
+            style: GoogleFonts.poppins(
+              fontSize: 8,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+              color: ThemeController.to.primary,
+            ),
+          ),
+        ),
+      ],
+    ],
+  );
+}
+
+// ────────────────────────────────────────────────────────────
 //  SUMMARY CARDS SECTION
-//
-//  Layout (bento grid):
-//  ┌──────────────────┬────────────────┐
-//  │  Completed       │  Advance       │  ← Row 1
-//  ├────────┬─────────┴────────────────┤
-//  │Pending │  Total Expenses │Net Bal  │  ← Row 2
-//  └────────┴────────────────┴─────────┘
-//  │        Active Clients             │  ← Row 3 (full width)
 // ────────────────────────────────────────────────────────────
 
 class _SummaryCardsSection extends StatelessWidget {
@@ -479,25 +605,9 @@ class _SummaryCardsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section header
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              children: [
-                Container(
-                    width: 3, height: 14, color: ThemeController.to.primary),
-                const SizedBox(width: 8),
-                Text(
-                  'CLIENT FINANCIALS',
-                  style: GoogleFonts.poppins(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.8,
-                    color: ThemeController.to.primary,
-                  ),
-                ),
-              ],
-            ),
+            child: _sectionHeader('CLIENT FINANCIALS'),
           ),
           Column(
             children: [
@@ -534,7 +644,7 @@ class _SummaryCardsSection extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 1),
-              // ── Row 2: Pending | Expenses | Net Balance ───────
+              // ── Row 2: Pending | Overdue ──────────────────────
               IntrinsicHeight(
                 child: Row(
                   children: [
@@ -551,6 +661,26 @@ class _SummaryCardsSection extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 1),
+                    Expanded(
+                      child: _SummaryCard(
+                        label: 'Overdue',
+                        value: fmt.format(d!.overdueValue),
+                        subLabel: '${d!.overdueCount} client${d!.overdueCount == 1 ? '' : 's'}',
+                        icon: Icons.warning_amber_rounded,
+                        color: BillifyColors.overdue,
+                        bgColor: const Color(0xFFFFF3E0),
+                        onTap: () => _navTo(AppRoutes.clients,
+                            arguments: {'filter': 'Overdue'}),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 1),
+              // ── Row 3: Expenses | Net Balance ─────────────────
+              IntrinsicHeight(
+                child: Row(
+                  children: [
                     Expanded(
                       child: _SummaryCard(
                         label: 'Expenses',
@@ -579,7 +709,7 @@ class _SummaryCardsSection extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 1),
-              // ── Row 3: Active Clients (full width) ────────────
+              // ── Row 4: Active Clients (full width) ────────────
               _SummaryCard(
                 label: 'Active Clients',
                 value: '${d!.totalClients} client${d!.totalClients == 1 ? '' : 's'}',
@@ -598,7 +728,667 @@ class _SummaryCardsSection extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
-//  HEADER BANNER  (unchanged visual, updated sub-text)
+//  OVERVIEW KPI ROW  ← NEW
+// ────────────────────────────────────────────────────────────
+
+class _OverviewKpiRow extends StatelessWidget {
+  final _DashboardData d;
+  final NumberFormat fmt;
+  const _OverviewKpiRow({required this.d, required this.fmt});
+
+  @override
+  Widget build(BuildContext context) {
+    final overduePercent = d.totalClients > 0
+        ? (d.overdueCount / d.totalClients * 100)
+        : 0.0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionHeader('PERFORMANCE OVERVIEW'),
+          const SizedBox(height: 10),
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                  child: _KpiTile(
+                    label: 'COLLECTION\nRATE',
+                    value: '${d.collectionRate.toStringAsFixed(1)}%',
+                    icon: Icons.trending_up_rounded,
+                    color: d.collectionRate >= 70
+                        ? BillifyColors.paid
+                        : d.collectionRate >= 40
+                        ? const Color(0xFF1976D2)
+                        : BillifyColors.unpaid,
+                    footnote: 'of total pipeline',
+                  ),
+                ),
+                const SizedBox(width: 1),
+                Expanded(
+                  child: _KpiTile(
+                    label: 'AVG DEAL\nSIZE',
+                    value: fmt.format(d.avgDealSize),
+                    icon: Icons.bar_chart_rounded,
+                    color: ThemeController.to.primary,
+                    footnote: 'per client',
+                  ),
+                ),
+                const SizedBox(width: 1),
+                Expanded(
+                  child: _KpiTile(
+                    label: 'OVERDUE\nRATE',
+                    value: '${overduePercent.toStringAsFixed(1)}%',
+                    icon: Icons.warning_amber_rounded,
+                    color: overduePercent > 20
+                        ? BillifyColors.overdue
+                        : overduePercent > 5
+                        ? BillifyColors.unpaid
+                        : BillifyColors.paid,
+                    footnote: '${d.overdueCount} client${d.overdueCount == 1 ? '' : 's'}',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KpiTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final String footnote;
+  final IconData icon;
+  final Color color;
+
+  const _KpiTile({
+    required this.label,
+    required this.value,
+    required this.footnote,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: BillifyColors.surface,
+        border: Border(
+          top: BorderSide(color: color, width: 2),
+          left: BorderSide(
+              color: BillifyColors.outlineVariant.withOpacity(0.3),
+              width: 0.5),
+          right: BorderSide(
+              color: BillifyColors.outlineVariant.withOpacity(0.3),
+              width: 0.5),
+          bottom: BorderSide(
+              color: BillifyColors.outlineVariant.withOpacity(0.3),
+              width: 0.5),
+        ),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              color: BillifyColors.textPrimary,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            footnote,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.poppins(
+              fontSize: 8,
+              fontWeight: FontWeight.w600,
+              color: color.withOpacity(0.8),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 7,
+              fontWeight: FontWeight.w700,
+              color: BillifyColors.textSecondary,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+//  QUICK ACTIONS SECTION  ← NEW
+// ────────────────────────────────────────────────────────────
+
+class _QuickActionsSection extends StatelessWidget {
+  const _QuickActionsSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final row1 = [
+      _QuickAction(
+        label: 'NEW\nCLIENT',
+        icon: Icons.person_add_rounded,
+        onTap: () => _navTo(AppRoutes.clientAdd),
+      ),
+      _QuickAction(
+        label: 'ADD\nEXPENSE',
+        icon: Icons.receipt_long_rounded,
+        onTap: () => _navTo(AppRoutes.expenseAdd),
+      ),
+      _QuickAction(
+        label: 'ALL\nCLIENTS',
+        icon: Icons.people_outline_rounded,
+        onTap: () => _navTo(AppRoutes.clients),
+      ),
+      _QuickAction(
+        label: 'EXPENSES\nLIST',
+        icon: Icons.account_balance_wallet_outlined,
+        onTap: () => _navTo(AppRoutes.expenses),
+      ),
+    ];
+    final row2 = [
+      _QuickAction(
+        label: 'ANALYTICS',
+        icon: Icons.bar_chart_rounded,
+        onTap: () => _navTo(AppRoutes.analytics),
+      ),
+      _QuickAction(
+        label: 'SETTLEMENT',
+        icon: Icons.handshake_rounded,
+        onTap: () => _navTo(AppRoutes.settlement),
+      ),
+    ];
+
+    Row buildRow(List<_QuickAction> acts) => Row(
+      children: acts.asMap().entries.map((e) {
+        return Expanded(
+          child: Row(
+            children: [
+              Expanded(child: _QuickActionTile(action: e.value)),
+              if (e.key < acts.length - 1) const SizedBox(width: 1),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionHeader('QUICK ACTIONS'),
+          const SizedBox(height: 10),
+          buildRow(row1),
+          const SizedBox(height: 1),
+          buildRow(row2),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickAction {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  const _QuickAction({required this.label, required this.icon, required this.onTap});
+}
+
+class _QuickActionTile extends StatelessWidget {
+  final _QuickAction action;
+  const _QuickActionTile({required this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: action.onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        decoration: BoxDecoration(
+          color: ThemeController.to.primary.withOpacity(0.05),
+          border: Border.all(
+            color: ThemeController.to.primary.withOpacity(0.2),
+            width: 0.5,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(action.icon, color: ThemeController.to.primary, size: 20),
+            const SizedBox(height: 6),
+            Text(
+              action.label,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 7,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.8,
+                color: ThemeController.to.primary,
+                height: 1.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+//  STATUS DISTRIBUTION SECTION  ← NEW
+// ────────────────────────────────────────────────────────────
+
+class _StatusDistributionSection extends StatelessWidget {
+  final _DashboardData d;
+  final NumberFormat fmt;
+  const _StatusDistributionSection({required this.d, required this.fmt});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = d.completedCount + d.advanceCount + d.pendingCount + d.overdueCount;
+    if (total == 0) return const SizedBox.shrink();
+
+    final segments = [
+      _DonutSegment('Completed', d.completedCount, BillifyColors.paid, const Color(0xFFE8F5E9)),
+      _DonutSegment('Advance', d.advanceCount, const Color(0xFF1976D2), const Color(0xFFE3F2FD)),
+      _DonutSegment('Pending', d.pendingCount, BillifyColors.unpaid, const Color(0xFFFFEBEE)),
+      _DonutSegment('Overdue', d.overdueCount, BillifyColors.overdue, const Color(0xFFFFF3E0)),
+    ].where((s) => s.count > 0).toList();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: BillifyColors.surface,
+          border: Border.all(
+              color: BillifyColors.outlineVariant.withOpacity(0.3),
+              width: 0.5),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionHeader('CLIENT STATUS SPLIT'),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                // Mini donut
+                SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: CustomPaint(
+                    painter: _DonutPainter(segments: segments, total: total),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '$total',
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: BillifyColors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'TOTAL',
+                            style: GoogleFonts.poppins(
+                              fontSize: 6,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.0,
+                              color: BillifyColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 20),
+                // Legend
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: segments.map((s) {
+                      final pct = (s.count / total * 100).toStringAsFixed(1);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Container(width: 10, height: 10, color: s.color),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                s.label.toUpperCase(),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.6,
+                                  color: BillifyColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${s.count}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: s.color,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$pct%',
+                              style: GoogleFonts.poppins(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w600,
+                                color: BillifyColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DonutSegment {
+  final String label;
+  final int count;
+  final Color color;
+  final Color bgColor;
+  const _DonutSegment(this.label, this.count, this.color, this.bgColor);
+}
+
+class _DonutPainter extends CustomPainter {
+  final List<_DonutSegment> segments;
+  final int total;
+  const _DonutPainter({required this.segments, required this.total});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final outerR = math.min(cx, cy) - 2;
+    final innerR = outerR * 0.55;
+    double startAngle = -math.pi / 2;
+    const gapAngle = 0.04;
+
+    for (final seg in segments) {
+      final sweep = (seg.count / total) * (2 * math.pi) - gapAngle;
+      final paint = Paint()
+        ..color = seg.color
+        ..style = PaintingStyle.fill;
+
+      final path = Path();
+      path.moveTo(cx + outerR * math.cos(startAngle), cy + outerR * math.sin(startAngle));
+      path.arcTo(Rect.fromCircle(center: Offset(cx, cy), radius: outerR),
+          startAngle, sweep, false);
+      path.arcTo(Rect.fromCircle(center: Offset(cx, cy), radius: innerR),
+          startAngle + sweep, -sweep, false);
+      path.close();
+      canvas.drawPath(path, paint);
+
+      startAngle += sweep + gapAngle;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DonutPainter old) => false;
+}
+
+// ────────────────────────────────────────────────────────────
+//  CATEGORY BREAKDOWN SECTION  ← NEW
+// ────────────────────────────────────────────────────────────
+
+class _CategoryBreakdownSection extends StatelessWidget {
+  final _DashboardData d;
+  final NumberFormat fmt;
+  const _CategoryBreakdownSection({required this.d, required this.fmt});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxVal = d.categoryIncome.values.fold(0.0, (a, b) => a > b ? a : b);
+    final top = d.categoryIncome.entries.take(5).toList();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: BillifyColors.surface,
+          border: Border.all(
+              color: BillifyColors.outlineVariant.withOpacity(0.3),
+              width: 0.5),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionHeader(
+              'INCOME BY CATEGORY',
+              action: 'VIEW CLIENTS →',
+              onAction: () => _navTo(AppRoutes.clients),
+            ),
+            const SizedBox(height: 14),
+            ...top.map((e) {
+              final ratio = maxVal > 0 ? e.value / maxVal : 0.0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            e.key.toUpperCase(),
+                            style: GoogleFonts.poppins(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                              color: BillifyColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          fmt.format(e.value),
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: BillifyColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Stack(
+                      children: [
+                        Container(
+                          height: 4,
+                          width: double.infinity,
+                          color: BillifyColors.surfaceContainer,
+                        ),
+                        FractionallySizedBox(
+                          widthFactor: ratio,
+                          child: Container(
+                            height: 4,
+                            color: ThemeController.to.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+//  EXPENSE BREAKDOWN SECTION  ← NEW
+// ────────────────────────────────────────────────────────────
+
+class _ExpenseBreakdownSection extends StatelessWidget {
+  final _DashboardData d;
+  final NumberFormat fmt;
+  const _ExpenseBreakdownSection({required this.d, required this.fmt});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxVal = d.expenseByCategory.values.fold(0.0, (a, b) => a > b ? a : b);
+    final top = d.expenseByCategory.entries.take(5).toList();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: BillifyColors.surface,
+          border: Border.all(
+              color: BillifyColors.outlineVariant.withOpacity(0.3),
+              width: 0.5),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionHeader(
+              'TOP EXPENSE CATEGORIES',
+              action: 'VIEW ALL →',
+              onAction: () => _navTo(AppRoutes.expenses),
+            ),
+            const SizedBox(height: 14),
+            ...top.map((e) {
+              final ratio = maxVal > 0 ? e.value / maxVal : 0.0;
+              final pct = d.totalExpense > 0
+                  ? (e.value / d.totalExpense * 100).toStringAsFixed(1)
+                  : '0.0';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            e.key.toUpperCase(),
+                            style: GoogleFonts.poppins(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                              color: BillifyColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '$pct%',
+                          style: GoogleFonts.poppins(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w600,
+                            color: BillifyColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          fmt.format(e.value),
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFFE53935),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Stack(
+                      children: [
+                        Container(
+                          height: 4,
+                          width: double.infinity,
+                          color: BillifyColors.surfaceContainer,
+                        ),
+                        FractionallySizedBox(
+                          widthFactor: ratio,
+                          child: Container(
+                            height: 4,
+                            color: const Color(0xFFE53935),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              color: const Color(0xFFFFEBEE),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'TOTAL EXPENSES',
+                    style: GoogleFonts.poppins(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      color: const Color(0xFFE53935),
+                    ),
+                  ),
+                  Text(
+                    fmt.format(d.totalExpense),
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFFE53935),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+//  HEADER BANNER
 // ────────────────────────────────────────────────────────────
 
 class _HeaderBanner extends StatelessWidget {
@@ -687,7 +1477,7 @@ class _DashGridPainter extends CustomPainter {
 }
 
 // ────────────────────────────────────────────────────────────
-//  SUMMARY CARD  (updated: optional subLabel)
+//  SUMMARY CARD
 // ────────────────────────────────────────────────────────────
 
 class _SummaryCard extends StatelessWidget {
@@ -829,7 +1619,7 @@ class _SummaryCard extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
-//  BAR CHART CARD  (income now = client payments, not invoices)
+//  BAR CHART CARD
 // ────────────────────────────────────────────────────────────
 
 class _BarChartCard extends StatelessWidget {
@@ -1002,7 +1792,7 @@ class _LegendDot extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
-//  RECENT CLIENTS SECTION  (replaces Recent Invoices)
+//  RECENT CLIENTS SECTION
 // ────────────────────────────────────────────────────────────
 
 class _RecentClientsSection extends StatelessWidget {
@@ -1018,7 +1808,11 @@ class _RecentClientsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionHeader(),
+          _sectionHeader(
+            'RECENT CLIENT ACTIVITY',
+            action: 'VIEW ALL →',
+            onAction: () => _navTo(AppRoutes.clients),
+          ),
           const SizedBox(height: 8),
           if (clients.isNotEmpty)
             Container(
@@ -1056,37 +1850,6 @@ class _RecentClientsSection extends StatelessWidget {
       fontWeight: FontWeight.w800,
       letterSpacing: 1.2,
       color: BillifyColors.textSecondary);
-
-  Widget _buildSectionHeader() {
-    return Row(
-      children: [
-        Container(width: 3, height: 14, color: ThemeController.to.primary),
-        const SizedBox(width: 8),
-        Text(
-          'RECENT CLIENT ACTIVITY',
-          style: GoogleFonts.poppins(
-            fontSize: 9,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.8,
-            color: ThemeController.to.primary,
-          ),
-        ),
-        const Spacer(),
-        GestureDetector(
-          onTap: () => _navTo(AppRoutes.clients),
-          child: Text(
-            'VIEW ALL →',
-            style: GoogleFonts.poppins(
-              fontSize: 8,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.2,
-              color: ThemeController.to.primary,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1102,7 +1865,7 @@ Color _clientStatusColor(String s) {
     case 'overdue':
       return BillifyColors.overdue;
     default:
-      return BillifyColors.unpaid; // pending
+      return BillifyColors.unpaid;
   }
 }
 
@@ -1132,7 +1895,7 @@ class _ClientActivityRow extends StatelessWidget {
     return GestureDetector(
       onTap: () => _navTo(
         AppRoutes.clientDetail,
-        arguments: {'clientId': client.id},
+        arguments: client.id,
       ),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
@@ -1149,7 +1912,6 @@ class _ClientActivityRow extends StatelessWidget {
         const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Row(
           children: [
-            // Client name + category
             Expanded(
               flex: 3,
               child: Column(
@@ -1176,7 +1938,6 @@ class _ClientActivityRow extends StatelessWidget {
                 ],
               ),
             ),
-            // Amount
             Expanded(
               flex: 2,
               child: Text(
@@ -1191,7 +1952,6 @@ class _ClientActivityRow extends StatelessWidget {
                 textAlign: TextAlign.right,
               ),
             ),
-            // Status badge
             Expanded(
               flex: 2,
               child: Center(
@@ -1219,8 +1979,7 @@ class _ClientActivityRow extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
-//  SHARED STATUS HELPERS  (kept for invoice detail screens
-//  that still import from dashboard_screen.dart)
+//  SHARED STATUS HELPERS
 // ────────────────────────────────────────────────────────────
 
 Color invoiceStatusColor(String s) {
@@ -1568,7 +2327,7 @@ class _EmptyClientActivityState extends StatelessWidget {
 }
 
 // ────────────────────────────────────────────────────────────
-//  EMPTY QUERY SNAPSHOT  (fallback when expense stream pending)
+//  EMPTY QUERY SNAPSHOT
 // ────────────────────────────────────────────────────────────
 
 class _EmptyQuerySnapshot implements QuerySnapshot<Map<String, dynamic>> {

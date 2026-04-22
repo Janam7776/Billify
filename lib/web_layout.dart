@@ -89,9 +89,11 @@ class WebLayoutService extends GetxService {
   /// Call after every navigation so the rail highlight and gate
   /// react to the current screen correctly.
   void syncRoute(String route) {
-    if (route.startsWith('/invoice')) { activeRoute.value = AppRoutes.invoices; return; }
-    if (route.startsWith('/expense')) { activeRoute.value = AppRoutes.expenses; return; }
-    if (route.startsWith('/client'))  { activeRoute.value = AppRoutes.clients;  return; }
+    if (route.startsWith('/invoice'))   { activeRoute.value = AppRoutes.invoices;   return; }
+    if (route.startsWith('/expense'))   { activeRoute.value = AppRoutes.expenses;   return; }
+    if (route.startsWith('/client'))    { activeRoute.value = AppRoutes.clients;    return; }
+    if (route.startsWith('/analytics')) { activeRoute.value = AppRoutes.analytics;  return; }
+    if (route.startsWith('/settlement')){ activeRoute.value = AppRoutes.settlement; return; }
     activeRoute.value = route;
   }
 

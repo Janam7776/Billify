@@ -17,7 +17,16 @@ import 'theme_controller.dart';
 import 'dashboard_screen.dart';
 import 'invoice_screens.dart';
 import 'expense_screens.dart';
-import 'client_screens.dart';
+import 'analytics_screen.dart' show AnalyticsScreen;
+import 'settlement_screen.dart' show SettlementScreen;
+import 'client_screens.dart'
+    show
+    ClientListScreen,
+    ClientDetailScreen,
+    ClientInfoFormScreen,
+    ClientReelFormScreen,
+    ClientFormScreen,
+    DashboardRecentClients;
 import 'web_layout.dart' show WebLayoutService, WebLayoutGate, DesktopNavCallback, showWebDevicePickerDialog;
 
 // firebase_options.dart is imported above — real keys from FlutterFire CLI
@@ -460,6 +469,8 @@ class AppRoutes {
   static const profile          = '/profile';
   static const settings         = '/settings';
   static const lock             = '/lock';
+  static const analytics   = '/analytics';
+  static const settlement  = '/settlement';
 }
 
 // ════════════════════════════════════════════════════════════
@@ -643,15 +654,31 @@ class _BillifyAppState extends State<BillifyApp>
         ),
         GetPage(
           name:       AppRoutes.clientAdd,
-          page:       () => const ClientFormScreen(),
+          page:       () => const ClientInfoFormScreen(),
           transition: Transition.rightToLeft,
           middlewares: [AuthMiddleware()],
         ),
         GetPage(
           name:       AppRoutes.clientEdit,
-          page:       () => ClientFormScreen(
-            clientId: Get.arguments as String?,
-          ),
+          page:       () {
+            // Arguments:
+            //   Map {'clientId': String}           → edit client info
+            //   Map {'clientId': String, 'reelIndex': int} → edit specific reel
+            //   String (legacy)                    → edit client info
+            final args = Get.arguments;
+            String? clientId;
+            int? reelIndex;
+            if (args is Map) {
+              clientId  = args['clientId'] as String?;
+              reelIndex = args['reelIndex'] as int?;
+            } else {
+              clientId = args as String?;
+            }
+            if (reelIndex != null && clientId != null) {
+              return ClientReelFormScreen(clientId: clientId, reelIndex: reelIndex);
+            }
+            return ClientInfoFormScreen(clientId: clientId);
+          },
           transition: Transition.rightToLeft,
           middlewares: [AuthMiddleware()],
         ),
@@ -679,6 +706,18 @@ class _BillifyAppState extends State<BillifyApp>
           name:       AppRoutes.lock,
           page:       () => const LockScreen(),
           transition: Transition.fadeIn,
+        ),
+        GetPage(
+          name:       AppRoutes.analytics,
+          page:       () => const AnalyticsScreen(),
+          transition: Transition.rightToLeft,
+          middlewares: [AuthMiddleware()],
+        ),
+        GetPage(
+          name:       AppRoutes.settlement,
+          page:       () => const SettlementScreen(),
+          transition: Transition.rightToLeft,
+          middlewares: [AuthMiddleware()],
         ),
       ],
     );
@@ -1549,6 +1588,19 @@ class _BillifyDrawerState extends State<BillifyDrawer>
                       route:       AppRoutes.profile,
                       activeRoute: widget.activeRoute,
                     ),
+                    _NavItem(
+                      icon: Icons.bar_chart_rounded,
+                      label: 'Analytics',
+                      route: AppRoutes.analytics,
+                      activeRoute: widget.activeRoute,
+                    ),
+                    _NavItem(
+                      icon: Icons.handshake_rounded,
+                      label: 'Settlement',
+                      route: AppRoutes.settlement,
+                      activeRoute: widget.activeRoute,
+                    ),
+
 
                     // ── Section label: More ──────────────────────
                     _DrawerSectionLabel(label: 'MORE'),
