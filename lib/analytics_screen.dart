@@ -509,16 +509,16 @@ class _QuickKpiStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = BillifyC.of(context);
-    final fmt = NumberFormat.compact(locale: 'en_IN');
+    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
     return Container(
       color: c.card,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _StripStat('REVENUE', '₹${fmt.format(data.totalRevenue)}',
+          _StripStat('REVENUE', '${fmt.format(data.totalRevenue)}',
               BillifyColors.primary, data.revenueTrend, c),
           Container(width: 0.5, height: 28, color: c.border),
-          _StripStat('NET PROFIT', '₹${fmt.format(data.netProfit)}',
+          _StripStat('NET PROFIT', '${fmt.format(data.netProfit)}',
               data.netProfit >= 0 ? BillifyColors.paid : BillifyColors.overdue,
               data.profitTrend, c),
           Container(width: 0.5, height: 28, color: c.border),
@@ -690,7 +690,7 @@ class _OverviewTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = NumberFormat.compact(locale: 'en_IN');
+    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
     final fullFmt =
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
     return ListView(
@@ -1365,7 +1365,7 @@ class _IncomeExpenseBarChart extends StatelessWidget {
               final label = ri == 0 ? 'Income' : 'Expense';
               final val = ri == 0 ? s.revenue : s.expense;
               return BarTooltipItem(
-                '$label\n${NumberFormat.compact(locale: 'en_IN').format(val)}',
+                '$label\n${NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(val)}',
                 GoogleFonts.poppins(fontSize: 11, color: Colors.white),
               );
             },
@@ -1377,7 +1377,7 @@ class _IncomeExpenseBarChart extends StatelessWidget {
               showTitles: true,
               reservedSize: 52,
               getTitlesWidget: (v, _) => Text(
-                NumberFormat.compact(locale: 'en_IN').format(v),
+                NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v),
                 style:
                 GoogleFonts.poppins(fontSize: 10, color: c.textSecondary),
               ),
@@ -1465,7 +1465,7 @@ class _NetProfitLineChart extends StatelessWidget {
             getTooltipItems: (spots) => spots.map((s) {
               final stat = stats[s.x.toInt()];
               return LineTooltipItem(
-                '${stat.label}\n${NumberFormat.compact(locale: 'en_IN').format(s.y)}',
+                '${stat.label}\n${NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(s.y)}',
                 GoogleFonts.poppins(fontSize: 11, color: Colors.white),
               );
             }).toList(),
@@ -1477,7 +1477,7 @@ class _NetProfitLineChart extends StatelessWidget {
               showTitles: true,
               reservedSize: 56,
               getTitlesWidget: (v, _) => Text(
-                NumberFormat.compact(locale: 'en_IN').format(v),
+                NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v),
                 style: GoogleFonts.poppins(fontSize: 10, color: c.textSecondary),
               ),
             ),
@@ -1581,7 +1581,7 @@ class _StatusPieChartState extends State<_StatusPieChart> {
     if (entries.isEmpty) return _EmptyChart();
 
     final total = entries.fold(0.0, (s, e) => s + e.value);
-    final fmt = NumberFormat.compact(locale: 'en_IN');
+    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
     return Row(
       children: [
@@ -1628,7 +1628,7 @@ class _StatusPieChartState extends State<_StatusPieChart> {
               return _LegendItem(
                 color: _statusColor(e.key),
                 label: e.key,
-                value: '₹${fmt.format(e.value)}',
+                value: '${fmt.format(e.value)}',
                 subtitle: '$count client${count == 1 ? '' : 's'}',
               );
             }).toList(),
@@ -1658,7 +1658,7 @@ class _PaymentTypePieChartState extends State<_PaymentTypePieChart> {
     if (entries.isEmpty) return _EmptyChart();
 
     final total = entries.fold(0.0, (s, e) => s + e.value);
-    final fmt = NumberFormat.compact(locale: 'en_IN');
+    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
     return Row(
       children: [
@@ -1704,7 +1704,7 @@ class _PaymentTypePieChartState extends State<_PaymentTypePieChart> {
               return _LegendItem(
                 color: _chartColor(e.key),
                 label: e.value.key,
-                value: '₹${fmt.format(e.value.value)}',
+                value: '${fmt.format(e.value.value)}',
               );
             }).toList(),
           ),
@@ -1732,7 +1732,7 @@ class _GenericPieChartState extends State<_GenericPieChart> {
     if (entries.isEmpty) return _EmptyChart();
 
     final total = entries.fold(0.0, (s, e) => s + e.value);
-    final fmt = NumberFormat.compact(locale: 'en_IN');
+    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
     final c = BillifyC.of(context);
 
     return Row(
@@ -1779,7 +1779,7 @@ class _GenericPieChartState extends State<_GenericPieChart> {
               return _LegendItem(
                 color: _chartColor(e.key),
                 label: e.value.key,
-                value: '₹${fmt.format(e.value.value)}',
+                value: '${fmt.format(e.value.value)}',
               );
             }).toList(),
           ),
@@ -1808,7 +1808,7 @@ class _DonutChartState extends State<_DonutChart> {
     if (entries.isEmpty) return _EmptyChart();
 
     final total = entries.fold(0.0, (s, e) => s + e.value);
-    final fmt = NumberFormat.compact(locale: 'en_IN');
+    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
     final c = BillifyC.of(context);
 
     return Row(
@@ -1852,7 +1852,7 @@ class _DonutChartState extends State<_DonutChart> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '₹${fmt.format(total)}',
+                    '${fmt.format(total)}',
                     style: GoogleFonts.poppins(
                       fontSize: 14,
                       fontWeight: FontWeight.w900,
@@ -1884,7 +1884,7 @@ class _DonutChartState extends State<_DonutChart> {
                   color: _chartColor(e.key),
                   label: e.value.key,
                   value: '${pct.toStringAsFixed(1)}%',
-                  subtitle: '₹${fmt.format(e.value.value)}',
+                  subtitle: '${fmt.format(e.value.value)}',
                 );
               }).toList(),
             ),
@@ -2000,7 +2000,7 @@ class _TopClientsChart extends StatelessWidget {
     if (clients.isEmpty) return _EmptyChart();
     final c = BillifyC.of(context);
     final maxVal = clients.map((c) => c.revenue).fold(0.0, math.max);
-    final fmt = NumberFormat.compact(locale: 'en_IN');
+    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
     return Column(
       children: clients.asMap().entries.map((e) {
@@ -2046,7 +2046,7 @@ class _TopClientsChart extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                '₹${fmt.format(e.value.revenue)}',
+                '${fmt.format(e.value.revenue)}',
                 style: GoogleFonts.poppins(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
@@ -2081,7 +2081,7 @@ class _MonthlyExpenseBarChart extends StatelessWidget {
             getTooltipItem: (group, gi, rod, ri) {
               final s = stats[group.x];
               return BarTooltipItem(
-                '${s.label}: ₹${NumberFormat.compact(locale: 'en_IN').format(s.expense)}',
+                '${s.label}: ₹${NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(s.expense)}',
                 GoogleFonts.poppins(fontSize: 11, color: Colors.white),
               );
             },
@@ -2093,7 +2093,7 @@ class _MonthlyExpenseBarChart extends StatelessWidget {
               showTitles: true,
               reservedSize: 52,
               getTitlesWidget: (v, _) => Text(
-                NumberFormat.compact(locale: 'en_IN').format(v),
+                NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v),
                 style: GoogleFonts.poppins(fontSize: 10, color: c.textSecondary),
               ),
             ),

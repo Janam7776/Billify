@@ -83,8 +83,10 @@ class SettlementModel {
   final double settledAmount;
   final String status; // 'Paid' | 'Pending' | 'Partial'
   final String notes;
+  final String paymentMethod;
   final DateTime createdAt;
   final DateTime? settledAt;
+  final DateTime? settlementDate;
 
   const SettlementModel({
     required this.id,
@@ -96,8 +98,10 @@ class SettlementModel {
     required this.settledAmount,
     required this.status,
     this.notes = '',
+    this.paymentMethod = '',
     required this.createdAt,
     this.settledAt,
+    this.settlementDate,
   });
 
   factory SettlementModel.fromDoc(DocumentSnapshot doc) {
@@ -112,8 +116,10 @@ class SettlementModel {
       settledAmount: ((d['settledAmount'] ?? 0) as num).toDouble(),
       status: d['status'] as String? ?? 'Pending',
       notes: d['notes'] as String? ?? '',
+      paymentMethod: d['paymentMethod'] as String? ?? '',
       createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       settledAt: (d['settledAt'] as Timestamp?)?.toDate(),
+      settlementDate: (d['settlementDate'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -126,8 +132,10 @@ class SettlementModel {
     'settledAmount': settledAmount,
     'status': status,
     'notes': notes,
+    'paymentMethod': paymentMethod,
     'createdAt': Timestamp.fromDate(createdAt),
     'settledAt': settledAt != null ? Timestamp.fromDate(settledAt!) : null,
+    'settlementDate': settlementDate != null ? Timestamp.fromDate(settlementDate!) : null,
   };
 }
 
@@ -423,7 +431,7 @@ class _SettlementSummaryStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = BillifyC.of(context);
-    final fmt = NumberFormat.compact(locale: 'en_IN');
+    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -459,14 +467,14 @@ class _SettlementSummaryStrip extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  _SummaryTile('TOTAL', '₹${fmt.format(totalAmount)}',
+                  _SummaryTile('TOTAL', '${fmt.format(totalAmount)}',
                       Icons.account_balance_wallet_rounded, c.primary, c),
                   Container(width: 0.5, height: 52, color: c.border),
-                  _SummaryTile('PAID', '₹${fmt.format(paidAmount)}',
+                  _SummaryTile('PAID', '${fmt.format(paidAmount)}',
                       Icons.check_circle_rounded, BillifyColors.paid, c,
                       sub: '$paidCount settled'),
                   Container(width: 0.5, height: 52, color: c.border),
-                  _SummaryTile('PENDING', '₹${fmt.format(pendingAmount)}',
+                  _SummaryTile('PENDING', '${fmt.format(pendingAmount)}',
                       Icons.pending_rounded, BillifyColors.unpaid, c,
                       sub: '$pendingCount pending'),
                 ],
@@ -809,7 +817,16 @@ class _SettlementCard extends StatelessWidget {
                     style: GoogleFonts.poppins(
                         fontSize: 9, color: c.textSecondary),
                   ),
-                  if (settlement.settledAt != null) ...[
+                  if (settlement.settlementDate != null) ...[
+                    const SizedBox(width: 12),
+                    Icon(Icons.check_rounded, size: 10, color: BillifyColors.paid),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Settled ${dateFmt.format(settlement.settlementDate!)}',
+                      style: GoogleFonts.poppins(
+                          fontSize: 9, color: BillifyColors.paid),
+                    ),
+                  ] else if (settlement.settledAt != null) ...[
                     const SizedBox(width: 12),
                     Icon(Icons.check_rounded, size: 10, color: BillifyColors.paid),
                     const SizedBox(width: 4),
@@ -817,6 +834,16 @@ class _SettlementCard extends StatelessWidget {
                       'Settled ${dateFmt.format(settlement.settledAt!)}',
                       style: GoogleFonts.poppins(
                           fontSize: 9, color: BillifyColors.paid),
+                    ),
+                  ],
+                  if (settlement.paymentMethod.isNotEmpty) ...[
+                    const SizedBox(width: 12),
+                    Icon(Icons.payment_rounded, size: 10, color: c.textSecondary),
+                    const SizedBox(width: 4),
+                    Text(
+                      settlement.paymentMethod,
+                      style: GoogleFonts.poppins(
+                          fontSize: 9, color: c.textSecondary),
                     ),
                   ],
                   const Spacer(),
@@ -887,7 +914,9 @@ class _SettlementFormSheetState extends State<_SettlementFormSheet> {
   String? _selectedPartnerId;
   String? _selectedPartnerName;
   String _status = 'Pending';
+  String _paymentMethod = '';
   bool _saving = false;
+  DateTime? _settlementDate;
 
   List<ClientModel> _clients = [];
   List<PartnerModel> _partners = [];
@@ -905,6 +934,8 @@ class _SettlementFormSheetState extends State<_SettlementFormSheet> {
       _selectedPartnerId = e.partnerId;
       _selectedPartnerName = e.partnerName;
       _status = e.status;
+      _settlementDate = e.settlementDate;
+      _paymentMethod = e.paymentMethod;
     }
     _loadOptions();
   }
@@ -967,8 +998,10 @@ class _SettlementFormSheetState extends State<_SettlementFormSheet> {
       settledAmount: _status == 'Paid' ? amount : 0,
       status: _status,
       notes: _notesCtrl.text.trim(),
+      paymentMethod: _paymentMethod,
       createdAt: widget.existing?.createdAt ?? now,
       settledAt: _status == 'Paid' ? now : null,
+      settlementDate: _settlementDate,
     ).toMap();
 
     try {
@@ -1147,6 +1180,56 @@ class _SettlementFormSheetState extends State<_SettlementFormSheet> {
                   ),
                   const SizedBox(height: 12),
 
+                  // Payment Method
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('PAYMENT METHOD',
+                          style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
+                              color: c.textSecondary)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: ['Cash', 'UPI', 'Bank Transfer', 'Cheque', 'Other'].map((m) {
+                          final active = _paymentMethod == m;
+                          return GestureDetector(
+                            onTap: () => setState(() =>
+                            _paymentMethod = active ? '' : m),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: active
+                                    ? c.primary
+                                    : c.primary.withOpacity(0.08),
+                                border: Border.all(
+                                    color: active
+                                        ? c.primary
+                                        : c.primary.withOpacity(0.3),
+                                    width: 1),
+                                borderRadius: BorderRadius.zero,
+                              ),
+                              child: Text(
+                                m.toUpperCase(),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.8,
+                                  color: active ? Colors.white : c.primary,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
                   // Notes
                   TextFormField(
                     controller: _notesCtrl,
@@ -1156,6 +1239,87 @@ class _SettlementFormSheetState extends State<_SettlementFormSheet> {
                       labelText: 'NOTES (OPTIONAL)',
                       prefixIcon:
                       Icon(Icons.notes_rounded, size: 16),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Settlement Date picker
+                  GestureDetector(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _settlementDate ?? DateTime.now(),
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                        helpText: 'SELECT SETTLEMENT DATE',
+                      );
+                      if (picked != null) {
+                        setState(() => _settlementDate = picked);
+                      }
+                    },
+                    child: Container(
+                      height: 52,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: context.isDark
+                            ? BillifyColors.darkCard
+                            : BillifyColors.surfaceLow,
+                        border: Border.all(
+                          color: _settlementDate != null
+                              ? c.primary
+                              : context.isDark
+                              ? BillifyColors.darkBorder
+                              : BillifyColors.outlineVariant.withOpacity(0.6),
+                          width: _settlementDate != null ? 1.5 : 1,
+                        ),
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.event_rounded,
+                              size: 16,
+                              color: _settlementDate != null
+                                  ? c.primary
+                                  : c.textSecondary),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text('SETTLEMENT DATE (OPTIONAL)',
+                                    style: GoogleFonts.poppins(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.8,
+                                        color: c.textSecondary)),
+                                Text(
+                                  _settlementDate != null
+                                      ? DateFormat('dd MMM yyyy')
+                                      .format(_settlementDate!)
+                                      : 'Tap to choose a date',
+                                  style: GoogleFonts.nunito(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: _settlementDate != null
+                                          ? c.textPrimary
+                                          : c.textSecondary.withOpacity(0.6)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_settlementDate != null)
+                            GestureDetector(
+                              onTap: () =>
+                                  setState(() => _settlementDate = null),
+                              child: Icon(Icons.clear_rounded,
+                                  size: 16, color: c.textSecondary),
+                            )
+                          else
+                            Icon(Icons.chevron_right_rounded,
+                                size: 18, color: c.textSecondary),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -1488,7 +1652,7 @@ class _PartnerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = BillifyC.of(context);
-    final fmt = NumberFormat.compact(locale: 'en_IN');
+    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
     // Build initials (up to 2 chars)
     final initials = partner.name.trim().split(' ')
         .where((w) => w.isNotEmpty)
@@ -1623,7 +1787,7 @@ class _PartnerCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '₹${fmt.format(total)}',
+                          '${fmt.format(total)}',
                           style: GoogleFonts.poppins(
                             fontSize: 12,
                             fontWeight: FontWeight.w900,
@@ -1631,7 +1795,7 @@ class _PartnerCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '₹${fmt.format(paid)} paid',
+                          '${fmt.format(paid)} paid',
                           style: GoogleFonts.poppins(
                             fontSize: 9,
                             color: BillifyColors.paid,
@@ -1644,7 +1808,7 @@ class _PartnerCard extends StatelessWidget {
                                 horizontal: 6, vertical: 1),
                             color: BillifyColors.unpaid.withOpacity(0.1),
                             child: Text(
-                              '₹${fmt.format(due)} DUE',
+                              '${fmt.format(due)} DUE',
                               style: GoogleFonts.poppins(
                                 fontSize: 8,
                                 fontWeight: FontWeight.w800,
