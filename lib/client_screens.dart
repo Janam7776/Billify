@@ -254,6 +254,10 @@ class _ClientListScreenState extends State<ClientListScreen> {
   String? _filterStatus;
   String? _filterReelCategory;
   String? _filterClientCategory;
+  DateTime? _filterDateFrom;
+  DateTime? _filterDateTo;
+  // Sort: 'newest' | 'oldest' | 'name_asc' | 'name_desc' | 'amount_asc' | 'amount_desc'
+  String _sortOrder = 'newest';
 
   @override
   void dispose() {
@@ -293,6 +297,41 @@ class _ClientListScreenState extends State<ClientListScreen> {
           .where((c) => c.displayCategory == _filterClientCategory)
           .toList();
     }
+    // ── Custom date range filter (based on createdAt) ───────
+    if (_filterDateFrom != null) {
+      clients = clients
+          .where((c) => !c.createdAt.isBefore(_filterDateFrom!))
+          .toList();
+    }
+    if (_filterDateTo != null) {
+      final endOfDay = DateTime(
+          _filterDateTo!.year, _filterDateTo!.month, _filterDateTo!.day, 23, 59, 59);
+      clients = clients
+          .where((c) => !c.createdAt.isAfter(endOfDay))
+          .toList();
+    }
+    // ── Sort ────────────────────────────────────────────────
+    switch (_sortOrder) {
+      case 'oldest':
+        clients.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        break;
+      case 'name_asc':
+        clients.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        break;
+      case 'name_desc':
+        clients.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+        break;
+      case 'amount_asc':
+        clients.sort((a, b) => a.totalPaymentAmount.compareTo(b.totalPaymentAmount));
+        break;
+      case 'amount_desc':
+        clients.sort((a, b) => b.totalPaymentAmount.compareTo(a.totalPaymentAmount));
+        break;
+      case 'newest':
+      default:
+        clients.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+    }
     return clients;
   }
 
@@ -305,11 +344,17 @@ class _ClientListScreenState extends State<ClientListScreen> {
         selectedStatus: _filterStatus,
         selectedReel: _filterReelCategory,
         selectedCategory: _filterClientCategory,
-        onApply: (status, reel, cat) {
+        dateFrom: _filterDateFrom,
+        dateTo: _filterDateTo,
+        sortOrder: _sortOrder,
+        onApply: (status, reel, cat, dateFrom, dateTo, sortOrder) {
           setState(() {
             _filterStatus = status;
             _filterReelCategory = reel;
             _filterClientCategory = cat;
+            _filterDateFrom = dateFrom;
+            _filterDateTo = dateTo;
+            _sortOrder = sortOrder;
           });
         },
       ),
@@ -319,7 +364,10 @@ class _ClientListScreenState extends State<ClientListScreen> {
   bool get _hasFilter =>
       _filterStatus != null ||
           _filterReelCategory != null ||
-          _filterClientCategory != null;
+          _filterClientCategory != null ||
+          _filterDateFrom != null ||
+          _filterDateTo != null ||
+          _sortOrder != 'newest';
 
   @override
   Widget build(BuildContext context) {
@@ -484,6 +532,21 @@ class _ClientListScreenState extends State<ClientListScreen> {
   }
 
   Widget _buildActiveFilters() {
+    final dateFmt = DateFormat('dd MMM yy');
+    String? dateRangeLabel;
+    if (_filterDateFrom != null || _filterDateTo != null) {
+      final from = _filterDateFrom != null ? dateFmt.format(_filterDateFrom!) : '…';
+      final to = _filterDateTo != null ? dateFmt.format(_filterDateTo!) : '…';
+      dateRangeLabel = '$from – $to';
+    }
+    final sortLabels = {
+      'newest': 'Newest First',
+      'oldest': 'Oldest First',
+      'name_asc': 'Name A→Z',
+      'name_desc': 'Name Z→A',
+      'amount_asc': 'Amount ↑',
+      'amount_desc': 'Amount ↓',
+    };
     return Container(
       height: 36,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -502,11 +565,25 @@ class _ClientListScreenState extends State<ClientListScreen> {
             _FilterChip(
                 label: _filterClientCategory!,
                 onRemove: () => setState(() => _filterClientCategory = null)),
+          if (dateRangeLabel != null)
+            _FilterChip(
+                label: dateRangeLabel,
+                onRemove: () => setState(() {
+                  _filterDateFrom = null;
+                  _filterDateTo = null;
+                })),
+          if (_sortOrder != 'newest')
+            _FilterChip(
+                label: sortLabels[_sortOrder] ?? _sortOrder,
+                onRemove: () => setState(() => _sortOrder = 'newest')),
           TextButton(
             onPressed: () => setState(() {
               _filterStatus = null;
               _filterReelCategory = null;
               _filterClientCategory = null;
+              _filterDateFrom = null;
+              _filterDateTo = null;
+              _sortOrder = 'newest';
             }),
             style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0)),
@@ -2185,12 +2262,18 @@ class _ClientFilterSheet extends StatefulWidget {
   final String? selectedStatus;
   final String? selectedReel;
   final String? selectedCategory;
-  final void Function(String?, String?, String?) onApply;
+  final DateTime? dateFrom;
+  final DateTime? dateTo;
+  final String sortOrder;
+  final void Function(String?, String?, String?, DateTime?, DateTime?, String) onApply;
 
   const _ClientFilterSheet({
     this.selectedStatus,
     this.selectedReel,
     this.selectedCategory,
+    this.dateFrom,
+    this.dateTo,
+    this.sortOrder = 'newest',
     required this.onApply,
   });
 
@@ -2202,82 +2285,234 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
   String? _status;
   String? _reel;
   String? _category;
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
+  String _sortOrder = 'newest';
+
+  static const _kSortOptions = [
+    ('newest',      'Newest First',  Icons.arrow_downward_rounded),
+    ('oldest',      'Oldest First',  Icons.arrow_upward_rounded),
+    ('name_asc',    'Name A → Z',    Icons.sort_by_alpha_rounded),
+    ('name_desc',   'Name Z → A',    Icons.sort_by_alpha_rounded),
+    ('amount_desc', 'Amount High→Low', Icons.trending_down_rounded),
+    ('amount_asc',  'Amount Low→High', Icons.trending_up_rounded),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _status = widget.selectedStatus;
-    _reel = widget.selectedReel;
+    _status   = widget.selectedStatus;
+    _reel     = widget.selectedReel;
     _category = widget.selectedCategory;
+    _dateFrom = widget.dateFrom;
+    _dateTo   = widget.dateTo;
+    _sortOrder = widget.sortOrder;
+  }
+
+  Future<void> _pickDateFrom() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dateFrom ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: _dateTo ?? DateTime.now(),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: ColorScheme.light(primary: ThemeController.to.primary),
+          dialogTheme: const DialogThemeData(shape: RoundedRectangleBorder()),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) setState(() => _dateFrom = picked);
+  }
+
+  Future<void> _pickDateTo() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dateTo ?? DateTime.now(),
+      firstDate: _dateFrom ?? DateTime(2000),
+      lastDate: DateTime.now(),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: ColorScheme.light(primary: ThemeController.to.primary),
+          dialogTheme: const DialogThemeData(shape: RoundedRectangleBorder()),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) setState(() => _dateTo = picked);
   }
 
   @override
   Widget build(BuildContext context) {
+    final dateFmt = DateFormat('dd MMM yyyy');
     return Container(
       color: BillifyColors.surface,
       padding: EdgeInsets.fromLTRB(
           20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 36),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(height: 3, color: ThemeController.to.primary),
-          const SizedBox(height: 16),
-          Text('FILTER CLIENTS',
-              style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
-                  color: ThemeController.to.primary)),
-          const SizedBox(height: 16),
-          _filterGroup('PAYMENT STATUS', _kPaymentStatuses, _status,
-                  (v) => setState(() => _status = _status == v ? null : v)),
-          const SizedBox(height: 12),
-          _filterGroup(
-              'REEL CATEGORY',
-              _kClientCategories.where((c) => c != 'Custom').toList(),
-              _category,
-                  (v) => setState(() => _category = _category == v ? null : v)),
-          const SizedBox(height: 12),
-          _filterGroup(
-              'REEL CATEGORY',
-              _kReelCategories.where((c) => c != 'Custom').toList(),
-              _reel,
-                  (v) => setState(() => _reel = _reel == v ? null : v)),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => setState(() {
-                    _status = null;
-                    _reel = null;
-                    _category = null;
-                  }),
-                  child: Text('CLEAR',
-                      style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11,
-                          letterSpacing: 1.2)),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(height: 3, color: ThemeController.to.primary),
+            const SizedBox(height: 16),
+            Text('FILTER & SORT CLIENTS',
+                style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                    color: ThemeController.to.primary)),
+            const SizedBox(height: 16),
+
+            // ── Payment Status ────────────────────────────────
+            _filterGroup('PAYMENT STATUS', _kPaymentStatuses, _status,
+                    (v) => setState(() => _status = _status == v ? null : v)),
+            const SizedBox(height: 12),
+
+            // ── Client Category ───────────────────────────────
+            _filterGroup(
+                'CLIENT CATEGORY',
+                _kClientCategories.where((c) => c != 'Custom').toList(),
+                _category,
+                    (v) => setState(() => _category = _category == v ? null : v)),
+            const SizedBox(height: 12),
+
+            // ── Reel Category ─────────────────────────────────
+            _filterGroup(
+                'REEL CATEGORY',
+                _kReelCategories.where((c) => c != 'Custom').toList(),
+                _reel,
+                    (v) => setState(() => _reel = _reel == v ? null : v)),
+            const SizedBox(height: 16),
+
+            // ── Custom Date Range ─────────────────────────────
+            Text('DATE RANGE (Created)',
+                style: GoogleFonts.poppins(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    color: BillifyColors.textSecondary)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _DatePickerTile(
+                    label: 'FROM',
+                    value: _dateFrom != null ? dateFmt.format(_dateFrom!) : null,
+                    onTap: _pickDateFrom,
+                    onClear: _dateFrom != null ? () => setState(() => _dateFrom = null) : null,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    widget.onApply(_status, _reel, _category);
-                    Get.back();
-                  },
-                  child: Text('APPLY',
+                Container(
+                  width: 24,
+                  alignment: Alignment.center,
+                  child: Text('–',
                       style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11,
-                          letterSpacing: 1.2)),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: BillifyColors.textSecondary)),
                 ),
-              ),
-            ],
-          ),
-        ],
+                Expanded(
+                  child: _DatePickerTile(
+                    label: 'TO',
+                    value: _dateTo != null ? dateFmt.format(_dateTo!) : null,
+                    onTap: _pickDateTo,
+                    onClear: _dateTo != null ? () => setState(() => _dateTo = null) : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // ── Sort By ───────────────────────────────────────
+            Text('SORT BY',
+                style: GoogleFonts.poppins(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    color: BillifyColors.textSecondary)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _kSortOptions.map((opt) {
+                final (value, label, icon) = opt;
+                final isSel = _sortOrder == value;
+                return GestureDetector(
+                  onTap: () => setState(() => _sortOrder = value),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSel
+                          ? ThemeController.to.primary
+                          : BillifyColors.surfaceLow,
+                      border: Border.all(
+                        color: isSel
+                            ? ThemeController.to.primary
+                            : BillifyColors.outlineVariant,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon,
+                            size: 11,
+                            color: isSel ? Colors.white : BillifyColors.textSecondary),
+                        const SizedBox(width: 5),
+                        Text(label,
+                            style: GoogleFonts.poppins(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.4,
+                                color: isSel ? Colors.white : BillifyColors.textPrimary)),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Action Buttons ────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => setState(() {
+                      _status   = null;
+                      _reel     = null;
+                      _category = null;
+                      _dateFrom = null;
+                      _dateTo   = null;
+                      _sortOrder = 'newest';
+                    }),
+                    child: Text('CLEAR',
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            letterSpacing: 1.2)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      widget.onApply(_status, _reel, _category, _dateFrom, _dateTo, _sortOrder);
+                      Get.back();
+                    },
+                    child: Text('APPLY',
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            letterSpacing: 1.2)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2326,6 +2561,84 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
           }).toList(),
         ),
       ],
+    );
+  }
+}
+
+// ── Date picker tile helper ─────────────────────────────────
+
+class _DatePickerTile extends StatelessWidget {
+  final String label;
+  final String? value;
+  final VoidCallback onTap;
+  final VoidCallback? onClear;
+
+  const _DatePickerTile({
+    required this.label,
+    required this.value,
+    required this.onTap,
+    this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasValue = value != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: hasValue
+              ? ThemeController.to.primary.withOpacity(0.07)
+              : BillifyColors.surfaceLow,
+          border: Border.all(
+            color: hasValue
+                ? ThemeController.to.primary.withOpacity(0.5)
+                : BillifyColors.outlineVariant,
+            width: hasValue ? 1.5 : 0.8,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.calendar_today_rounded,
+                size: 13,
+                color: hasValue
+                    ? ThemeController.to.primary
+                    : BillifyColors.textSecondary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: GoogleFonts.poppins(
+                          fontSize: 7,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: hasValue
+                              ? ThemeController.to.primary
+                              : BillifyColors.textSecondary)),
+                  Text(
+                    value ?? 'Any date',
+                    style: GoogleFonts.nunito(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: hasValue
+                            ? BillifyColors.textPrimary
+                            : BillifyColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            if (onClear != null)
+              GestureDetector(
+                onTap: onClear,
+                child: Icon(Icons.close_rounded,
+                    size: 14, color: ThemeController.to.primary),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
