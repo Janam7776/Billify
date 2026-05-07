@@ -71,8 +71,9 @@ class ReelEntry {
   Map<String, dynamic> toFields() {
     final s = _sfx(index);
     return {
-      'projectStartDate$s':
-      projectStartDate != null ? Timestamp.fromDate(projectStartDate!) : null,
+      'projectStartDate$s': projectStartDate != null
+          ? Timestamp.fromDate(projectStartDate!)
+          : null,
       'shootCategory$s': shootCategory,
       'customShootCategory$s': customShootCategory,
       'reelCategory$s': reelCategory,
@@ -154,7 +155,9 @@ class ClientModel {
     final d = doc.data() as Map<String, dynamic>;
     final reelCount = ReelEntry.countReels(d);
     final reels = reelCount == 0
-        ? [ReelEntry.fromMap(d, 1)] // fallback for legacy docs without reel fields
+        ? [
+            ReelEntry.fromMap(d, 1),
+          ] // fallback for legacy docs without reel fields
         : List.generate(reelCount, (i) => ReelEntry.fromMap(d, i + 1));
     return ClientModel(
       id: doc.id,
@@ -173,25 +176,39 @@ class ClientModel {
   String get paymentStatus => primaryReel.paymentStatus;
   String get displayReelCategory => primaryReel.displayReelCategory;
   String get displayPaymentType => primaryReel.displayPaymentType;
-  double get totalPaymentAmount => reels.fold(0, (sum, r) => sum + r.paymentAmount);
+  double get totalPaymentAmount =>
+      reels.fold(0, (sum, r) => sum + r.paymentAmount);
   int get reelCount => reels.length;
 
   String get displayCategory =>
       clientCategory == 'Custom' ? customClientCategory : clientCategory;
+
+  List<String> get displayShootCategories {
+    final values = <String>[];
+    for (final reel in reels) {
+      final value = reel.displayShootCategory.trim();
+      if (value.isNotEmpty && !values.contains(value)) values.add(value);
+    }
+    return values.isEmpty ? [displayCategory] : values;
+  }
+
+  bool hasShootCategory(String category) =>
+      displayShootCategories.any((c) => c == category);
 }
 
 // ════════════════════════════════════════════════════════════
 //  CONSTANTS
 // ════════════════════════════════════════════════════════════
 
-const _kClientCategories = [
-  'Mobile Shoot',
-  'Camera Shoot',
-  'Edit',
-  'Custom',
-];
+const _kClientCategories = ['Mobile Shoot', 'Camera Shoot', 'Edit', 'Custom'];
 
-const _kPaymentTypes = ['Cash', 'UPI', 'Bank Transfer', 'Card Payment', 'Other'];
+const _kPaymentTypes = [
+  'Cash',
+  'UPI',
+  'Bank Transfer',
+  'Card Payment',
+  'Other',
+];
 
 const _kPaymentStatuses = ['Pending', 'Advance', 'Completed', 'Overdue'];
 
@@ -212,28 +229,40 @@ const _kReelCategories = [
 
 Color _paymentStatusColor(String s) {
   switch (s.toLowerCase()) {
-    case 'completed': return BillifyColors.paid;
-    case 'advance':   return const Color(0xFF1976D2);
-    case 'overdue':   return BillifyColors.overdue;
-    default:          return BillifyColors.unpaid;
+    case 'completed':
+      return BillifyColors.paid;
+    case 'advance':
+      return const Color(0xFF1976D2);
+    case 'overdue':
+      return BillifyColors.overdue;
+    default:
+      return BillifyColors.unpaid;
   }
 }
 
 Color _paymentStatusBg(String s) {
   switch (s.toLowerCase()) {
-    case 'completed': return const Color(0xFFE8F5E9);
-    case 'advance':   return const Color(0xFFE3F2FD);
-    case 'overdue':   return const Color(0xFFFFF3E0);
-    default:          return const Color(0xFFFFEBEE);
+    case 'completed':
+      return const Color(0xFFE8F5E9);
+    case 'advance':
+      return const Color(0xFFE3F2FD);
+    case 'overdue':
+      return const Color(0xFFFFF3E0);
+    default:
+      return const Color(0xFFFFEBEE);
   }
 }
 
 IconData _paymentStatusIcon(String s) {
   switch (s.toLowerCase()) {
-    case 'completed': return Icons.check_circle_rounded;
-    case 'advance':   return Icons.timelapse_rounded;
-    case 'overdue':   return Icons.warning_amber_rounded;
-    default:          return Icons.hourglass_empty_rounded;
+    case 'completed':
+      return Icons.check_circle_rounded;
+    case 'advance':
+      return Icons.timelapse_rounded;
+    case 'overdue':
+      return Icons.warning_amber_rounded;
+    default:
+      return Icons.hourglass_empty_rounded;
   }
 }
 
@@ -279,12 +308,17 @@ class _ClientListScreenState extends State<ClientListScreen> {
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       clients = clients
-          .where((c) => c.name.toLowerCase().contains(q) || c.mobile.contains(q))
+          .where(
+            (c) => c.name.toLowerCase().contains(q) || c.mobile.contains(q),
+          )
           .toList();
     }
     if (_filterStatus != null) {
       clients = clients
-          .where((c) => c.paymentStatus.toLowerCase() == _filterStatus!.toLowerCase())
+          .where(
+            (c) =>
+                c.paymentStatus.toLowerCase() == _filterStatus!.toLowerCase(),
+          )
           .toList();
     }
     if (_filterReelCategory != null) {
@@ -294,7 +328,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
     }
     if (_filterClientCategory != null) {
       clients = clients
-          .where((c) => c.displayCategory == _filterClientCategory)
+          .where((c) => c.hasShootCategory(_filterClientCategory!))
           .toList();
     }
     // ── Custom date range filter (based on createdAt) ───────
@@ -305,10 +339,14 @@ class _ClientListScreenState extends State<ClientListScreen> {
     }
     if (_filterDateTo != null) {
       final endOfDay = DateTime(
-          _filterDateTo!.year, _filterDateTo!.month, _filterDateTo!.day, 23, 59, 59);
-      clients = clients
-          .where((c) => !c.createdAt.isAfter(endOfDay))
-          .toList();
+        _filterDateTo!.year,
+        _filterDateTo!.month,
+        _filterDateTo!.day,
+        23,
+        59,
+        59,
+      );
+      clients = clients.where((c) => !c.createdAt.isAfter(endOfDay)).toList();
     }
     // ── Sort ────────────────────────────────────────────────
     switch (_sortOrder) {
@@ -316,16 +354,24 @@ class _ClientListScreenState extends State<ClientListScreen> {
         clients.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         break;
       case 'name_asc':
-        clients.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        clients.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
         break;
       case 'name_desc':
-        clients.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+        clients.sort(
+          (a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()),
+        );
         break;
       case 'amount_asc':
-        clients.sort((a, b) => a.totalPaymentAmount.compareTo(b.totalPaymentAmount));
+        clients.sort(
+          (a, b) => a.totalPaymentAmount.compareTo(b.totalPaymentAmount),
+        );
         break;
       case 'amount_desc':
-        clients.sort((a, b) => b.totalPaymentAmount.compareTo(a.totalPaymentAmount));
+        clients.sort(
+          (a, b) => b.totalPaymentAmount.compareTo(a.totalPaymentAmount),
+        );
         break;
       case 'newest':
       default:
@@ -363,11 +409,11 @@ class _ClientListScreenState extends State<ClientListScreen> {
 
   bool get _hasFilter =>
       _filterStatus != null ||
-          _filterReelCategory != null ||
-          _filterClientCategory != null ||
-          _filterDateFrom != null ||
-          _filterDateTo != null ||
-          _sortOrder != 'newest';
+      _filterReelCategory != null ||
+      _filterClientCategory != null ||
+      _filterDateFrom != null ||
+      _filterDateTo != null ||
+      _sortOrder != 'newest';
 
   @override
   Widget build(BuildContext context) {
@@ -381,7 +427,10 @@ class _ClientListScreenState extends State<ClientListScreen> {
         label: Text(
           'NEW CLIENT',
           style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
+            fontWeight: FontWeight.w800,
+            fontSize: 10,
+            letterSpacing: 1.2,
+          ),
         ),
         backgroundColor: ThemeController.to.primary,
         foregroundColor: const Color(0xFFF7F7FF),
@@ -398,8 +447,10 @@ class _ClientListScreenState extends State<ClientListScreen> {
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return Center(
-                      child: CircularProgressIndicator(
-                          color: ThemeController.to.primary));
+                    child: CircularProgressIndicator(
+                      color: ThemeController.to.primary,
+                    ),
+                  );
                 }
                 if (snap.hasError) {
                   return _ErrorState(message: snap.error.toString());
@@ -407,17 +458,20 @@ class _ClientListScreenState extends State<ClientListScreen> {
                 final clients = _filter(snap.data?.docs ?? []);
                 // Keep reference for export
                 WidgetsBinding.instance.addPostFrameCallback(
-                        (_) => _latestFilteredClients = clients);
+                  (_) => _latestFilteredClients = clients,
+                );
                 if (clients.isEmpty) {
                   return _EmptyClientState(
-                      hasFilter: _hasFilter || _searchQuery.isNotEmpty);
+                    hasFilter: _hasFilter || _searchQuery.isNotEmpty,
+                  );
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
                   itemCount: clients.length,
                   separatorBuilder: (_, __) => Container(
-                      height: 1,
-                      color: BillifyColors.outlineVariant.withOpacity(0.4)),
+                    height: 1,
+                    color: BillifyColors.outlineVariant.withOpacity(0.4),
+                  ),
                   itemBuilder: (ctx, i) => _ClientCard(
                     client: clients[i],
                     onDelete: () => _deleteClient(clients[i]),
@@ -460,7 +514,9 @@ class _ClientListScreenState extends State<ClientListScreen> {
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(
-            height: 1, color: BillifyColors.outlineVariant.withOpacity(0.4)),
+          height: 1,
+          color: BillifyColors.outlineVariant.withOpacity(0.4),
+        ),
       ),
       actions: [
         // ── Export button ───────────────────────────────────
@@ -478,11 +534,13 @@ class _ClientListScreenState extends State<ClientListScreen> {
           icon: Stack(
             clipBehavior: Clip.none,
             children: [
-              Icon(Icons.filter_list_rounded,
-                  color: _hasFilter
-                      ? ThemeController.to.primary
-                      : BillifyColors.textSecondary,
-                  size: 22),
+              Icon(
+                Icons.filter_list_rounded,
+                color: _hasFilter
+                    ? ThemeController.to.primary
+                    : BillifyColors.textSecondary,
+                size: 22,
+              ),
               if (_hasFilter)
                 Positioned(
                   top: -2,
@@ -491,7 +549,9 @@ class _ClientListScreenState extends State<ClientListScreen> {
                     width: 8,
                     height: 8,
                     decoration: const BoxDecoration(
-                        color: BillifyColors.unpaid, shape: BoxShape.circle),
+                      color: BillifyColors.unpaid,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                 ),
             ],
@@ -511,20 +571,28 @@ class _ClientListScreenState extends State<ClientListScreen> {
         onChanged: (v) => setState(() => _searchQuery = v.trim()),
         decoration: InputDecoration(
           hintText: 'Search by name or mobile…',
-          prefixIcon:
-          Icon(Icons.search_rounded, color: ThemeController.to.primary, size: 18),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            color: ThemeController.to.primary,
+            size: 18,
+          ),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
-            icon: const Icon(Icons.close_rounded,
-                color: BillifyColors.textSecondary, size: 16),
-            onPressed: () {
-              _searchCtrl.clear();
-              setState(() => _searchQuery = '');
-            },
-          )
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    color: BillifyColors.textSecondary,
+                    size: 16,
+                  ),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
               : null,
-          contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 10,
+          ),
         ),
         style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w500),
       ),
@@ -535,7 +603,9 @@ class _ClientListScreenState extends State<ClientListScreen> {
     final dateFmt = DateFormat('dd MMM yy');
     String? dateRangeLabel;
     if (_filterDateFrom != null || _filterDateTo != null) {
-      final from = _filterDateFrom != null ? dateFmt.format(_filterDateFrom!) : '…';
+      final from = _filterDateFrom != null
+          ? dateFmt.format(_filterDateFrom!)
+          : '…';
       final to = _filterDateTo != null ? dateFmt.format(_filterDateTo!) : '…';
       dateRangeLabel = '$from – $to';
     }
@@ -555,27 +625,32 @@ class _ClientListScreenState extends State<ClientListScreen> {
         children: [
           if (_filterStatus != null)
             _FilterChip(
-                label: _filterStatus!,
-                onRemove: () => setState(() => _filterStatus = null)),
+              label: _filterStatus!,
+              onRemove: () => setState(() => _filterStatus = null),
+            ),
           if (_filterReelCategory != null)
             _FilterChip(
-                label: _filterReelCategory!,
-                onRemove: () => setState(() => _filterReelCategory = null)),
+              label: _filterReelCategory!,
+              onRemove: () => setState(() => _filterReelCategory = null),
+            ),
           if (_filterClientCategory != null)
             _FilterChip(
-                label: _filterClientCategory!,
-                onRemove: () => setState(() => _filterClientCategory = null)),
+              label: _filterClientCategory!,
+              onRemove: () => setState(() => _filterClientCategory = null),
+            ),
           if (dateRangeLabel != null)
             _FilterChip(
-                label: dateRangeLabel,
-                onRemove: () => setState(() {
-                  _filterDateFrom = null;
-                  _filterDateTo = null;
-                })),
+              label: dateRangeLabel,
+              onRemove: () => setState(() {
+                _filterDateFrom = null;
+                _filterDateTo = null;
+              }),
+            ),
           if (_sortOrder != 'newest')
             _FilterChip(
-                label: sortLabels[_sortOrder] ?? _sortOrder,
-                onRemove: () => setState(() => _sortOrder = 'newest')),
+              label: sortLabels[_sortOrder] ?? _sortOrder,
+              onRemove: () => setState(() => _sortOrder = 'newest'),
+            ),
           TextButton(
             onPressed: () => setState(() {
               _filterStatus = null;
@@ -586,13 +661,17 @@ class _ClientListScreenState extends State<ClientListScreen> {
               _sortOrder = 'newest';
             }),
             style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0)),
-            child: Text('CLEAR ALL',
-                style: GoogleFonts.poppins(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.0,
-                    color: BillifyColors.unpaid)),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+            ),
+            child: Text(
+              'CLEAR ALL',
+              style: GoogleFonts.poppins(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.0,
+                color: BillifyColors.unpaid,
+              ),
+            ),
           ),
         ],
       ),
@@ -607,7 +686,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
         iconColor: BillifyColors.unpaid,
         title: 'Delete Client',
         body:
-        'Are you sure you want to delete "${client.name}"? This cannot be undone.',
+            'Are you sure you want to delete "${client.name}"? This cannot be undone.',
         confirmLabel: 'Delete',
         confirmColor: BillifyColors.unpaid,
         onConfirm: () => Navigator.of(ctx).pop(true),
@@ -621,13 +700,20 @@ class _ClientListScreenState extends State<ClientListScreen> {
           .collection('clients')
           .doc(client.id)
           .delete();
-      Get.snackbar('Deleted', '${client.name} has been removed.',
-          backgroundColor: BillifyColors.paid,
-          colorText: Colors.white,
-          snackPosition: SnackPosition.TOP);
+      Get.snackbar(
+        'Deleted',
+        '${client.name} has been removed.',
+        backgroundColor: BillifyColors.paid,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
+      );
     } catch (e) {
-      Get.snackbar('Error', 'Could not delete client.',
-          backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
+      Get.snackbar(
+        'Error',
+        'Could not delete client.',
+        backgroundColor: BillifyColors.unpaid,
+        colorText: Colors.white,
+      );
     }
   }
 }
@@ -679,29 +765,40 @@ class _ClientCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(client.name,
-                      style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: c.textPrimary)),
+                  Text(
+                    client.name,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: c.textPrimary,
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   if (client.mobile.isNotEmpty)
-                    Text(client.mobile,
-                        style: GoogleFonts.nunito(
-                            fontSize: 12, color: c.textSecondary)),
+                    Text(
+                      client.mobile,
+                      style: GoogleFonts.nunito(
+                        fontSize: 12,
+                        color: c.textSecondary,
+                      ),
+                    ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
                     children: [
-                      _MiniChip(label: client.displayCategory),
+                      for (final category in client.displayShootCategories)
+                        _MiniChip(label: category),
                       _MiniChip(
-                          label: client.primaryReel.displayReelCategory,
-                          color: ThemeController.to.primaryLight),
+                        label: client.primaryReel.displayReelCategory,
+                        color: ThemeController.to.primaryLight,
+                      ),
                       if (client.reelCount > 1)
                         _MiniChip(
-                            label: '+${client.reelCount - 1} more reel${client.reelCount > 2 ? 's' : ''}',
-                            color: BillifyColors.paid),
+                          label:
+                              '+${client.reelCount - 1} more reel${client.reelCount > 2 ? 's' : ''}',
+                          color: BillifyColors.paid,
+                        ),
                     ],
                   ),
                 ],
@@ -715,28 +812,35 @@ class _ClientCard extends StatelessWidget {
                 Text(
                   '₹${fmt.format(client.totalPaymentAmount)}',
                   style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: c.textPrimary),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: c.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   color: statusBg,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(_paymentStatusIcon(client.paymentStatus),
-                          size: 10, color: statusColor),
+                      Icon(
+                        _paymentStatusIcon(client.paymentStatus),
+                        size: 10,
+                        color: statusColor,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         client.paymentStatus.toUpperCase(),
                         style: GoogleFonts.poppins(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
-                            color: statusColor),
+                          fontSize: 8,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: statusColor,
+                        ),
                       ),
                     ],
                   ),
@@ -748,8 +852,10 @@ class _ClientCard extends StatelessWidget {
                       icon: Icons.edit_rounded,
                       color: ThemeController.to.primary,
                       tooltip: 'Edit',
-                      onTap: () => Get.toNamed(AppRoutes.clientEdit,
-                          arguments: {'clientId': client.id}),
+                      onTap: () => Get.toNamed(
+                        AppRoutes.clientEdit,
+                        arguments: {'clientId': client.id},
+                      ),
                     ),
                     const SizedBox(width: 4),
                     _IconAction(
@@ -786,10 +892,11 @@ class _MiniChip extends StatelessWidget {
       child: Text(
         label.toUpperCase(),
         style: GoogleFonts.poppins(
-            fontSize: 7,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.6,
-            color: col),
+          fontSize: 7,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+          color: col,
+        ),
       ),
     );
   }
@@ -800,11 +907,12 @@ class _IconAction extends StatelessWidget {
   final Color color;
   final String tooltip;
   final VoidCallback onTap;
-  const _IconAction(
-      {required this.icon,
-        required this.color,
-        required this.onTap,
-        this.tooltip = ''});
+  const _IconAction({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    this.tooltip = '',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -898,26 +1006,34 @@ class _ClientInfoFormScreenState extends State<ClientInfoFormScreen> {
         // Editing existing — save client info and go back
         await col.doc(widget.clientId).update(baseData);
         Get.back();
-        Get.snackbar('Updated', 'Client info updated successfully.',
-            backgroundColor: BillifyColors.paid,
-            colorText: Colors.white,
-            snackPosition: SnackPosition.TOP);
+        Get.snackbar(
+          'Updated',
+          'Client info updated successfully.',
+          backgroundColor: BillifyColors.paid,
+          colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+        );
       } else {
         // Creating new — save client first, then proceed to reel form
-        final data = {
-          ...baseData,
-          'createdAt': FieldValue.serverTimestamp(),
-        };
+        final data = {...baseData, 'createdAt': FieldValue.serverTimestamp()};
         final ref = await col.add(data);
         // Navigate to reel form (first reel, index=1) passing the new client ID
         Get.off(
-              () => ClientReelFormScreen(clientId: ref.id, reelIndex: 1, isNewClient: true),
+          () => ClientReelFormScreen(
+            clientId: ref.id,
+            reelIndex: 1,
+            isNewClient: true,
+          ),
           transition: Transition.rightToLeft,
         );
       }
     } catch (e) {
-      Get.snackbar('Error', 'Could not save. Try again.',
-          backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
+      Get.snackbar(
+        'Error',
+        'Could not save. Try again.',
+        backgroundColor: BillifyColors.unpaid,
+        colorText: Colors.white,
+      );
     }
     if (mounted) setState(() => _isSaving = false);
   }
@@ -929,123 +1045,145 @@ class _ClientInfoFormScreenState extends State<ClientInfoFormScreen> {
       appBar: AppBar(
         backgroundColor: BillifyColors.background,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_rounded, color: ThemeController.to.primary),
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            color: ThemeController.to.primary,
+          ),
           onPressed: () => Get.back(),
         ),
         title: Text(
           _isEdit ? 'EDIT CLIENT INFO' : 'NEW CLIENT',
           style: GoogleFonts.poppins(
-              color: ThemeController.to.primary,
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2.0),
+            color: ThemeController.to.primary,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2.0,
+          ),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
-              height: 1, color: BillifyColors.outlineVariant.withOpacity(0.4)),
+            height: 1,
+            color: BillifyColors.outlineVariant.withOpacity(0.4),
+          ),
         ),
       ),
       body: _isFetching
           ? Center(
-          child: CircularProgressIndicator(color: ThemeController.to.primary))
-          : Column(
-        children: [
-          // Step indicator (only for new client flow)
-          if (!_isEdit) _StepIndicator(currentStep: 1, totalSteps: 2),
-          Expanded(
-            child: Form(
-              key: _formKey,
-              child: ListView(
-                padding:
-                const EdgeInsets.fromLTRB(16, 20, 16, 100),
-                children: [
-                  _SectionHeader(label: 'CLIENT INFORMATION'),
-                  const SizedBox(height: 12),
-
-                  // Name
-                  _buildField(
-                    label: 'CLIENT NAME *',
-                    child: TextFormField(
-                      controller: _nameCtrl,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: InputDecoration(
-                        hintText: 'Enter client full name',
-                        prefixIcon: Icon(Icons.person_rounded,
-                            color: ThemeController.to.primary, size: 18),
-                      ),
-                      validator: (v) =>
-                      (v == null || v.trim().isEmpty)
-                          ? 'Name is required'
-                          : null,
-                      style: GoogleFonts.nunito(
-                          fontWeight: FontWeight.w600, fontSize: 14),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Mobile
-                  _buildField(
-                    label: 'MOBILE NUMBER',
-                    child: TextFormField(
-                      controller: _mobileCtrl,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(15),
-                      ],
-                      decoration: InputDecoration(
-                        hintText: 'Enter mobile number (optional)',
-                        prefixIcon: Icon(Icons.phone_rounded,
-                            color: ThemeController.to.primary, size: 18),
-                      ),
-                      validator: (v) {
-                        if (v != null &&
-                            v.trim().isNotEmpty &&
-                            v.trim().length < 7) {
-                          return 'Enter a valid mobile number';
-                        }
-                        return null;
-                      },
-                      style: GoogleFonts.nunito(
-                          fontWeight: FontWeight.w600, fontSize: 14),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  const SizedBox(height: 32),
-
-                  // Action button
-                  SizedBox(
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: _isSaving ? null : _next,
-                      icon: _isSaving
-                          ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
-                          : Icon(
-                          _isEdit
-                              ? Icons.save_rounded
-                              : Icons.arrow_forward_rounded,
-                          size: 18),
-                      label: Text(
-                        _isEdit ? 'SAVE CHANGES' : 'CONTINUE TO REEL',
-                        style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                            letterSpacing: 1.5),
-                      ),
-                    ),
-                  ),
-                ],
+              child: CircularProgressIndicator(
+                color: ThemeController.to.primary,
               ),
+            )
+          : Column(
+              children: [
+                // Step indicator (only for new client flow)
+                if (!_isEdit) _StepIndicator(currentStep: 1, totalSteps: 2),
+                Expanded(
+                  child: Form(
+                    key: _formKey,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
+                      children: [
+                        _SectionHeader(label: 'CLIENT INFORMATION'),
+                        const SizedBox(height: 12),
+
+                        // Name
+                        _buildField(
+                          label: 'CLIENT NAME *',
+                          child: TextFormField(
+                            controller: _nameCtrl,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: InputDecoration(
+                              hintText: 'Enter client full name',
+                              prefixIcon: Icon(
+                                Icons.person_rounded,
+                                color: ThemeController.to.primary,
+                                size: 18,
+                              ),
+                            ),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Name is required'
+                                : null,
+                            style: GoogleFonts.nunito(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Mobile
+                        _buildField(
+                          label: 'MOBILE NUMBER',
+                          child: TextFormField(
+                            controller: _mobileCtrl,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(15),
+                            ],
+                            decoration: InputDecoration(
+                              hintText: 'Enter mobile number (optional)',
+                              prefixIcon: Icon(
+                                Icons.phone_rounded,
+                                color: ThemeController.to.primary,
+                                size: 18,
+                              ),
+                            ),
+                            validator: (v) {
+                              if (v != null &&
+                                  v.trim().isNotEmpty &&
+                                  v.trim().length < 7) {
+                                return 'Enter a valid mobile number';
+                              }
+                              return null;
+                            },
+                            style: GoogleFonts.nunito(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        const SizedBox(height: 32),
+
+                        // Action button
+                        SizedBox(
+                          height: 52,
+                          child: ElevatedButton.icon(
+                            onPressed: _isSaving ? null : _next,
+                            icon: _isSaving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    _isEdit
+                                        ? Icons.save_rounded
+                                        : Icons.arrow_forward_rounded,
+                                    size: 18,
+                                  ),
+                            label: Text(
+                              _isEdit ? 'SAVE CHANGES' : 'CONTINUE TO REEL',
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1056,10 +1194,11 @@ class _ClientInfoFormScreenState extends State<ClientInfoFormScreen> {
         Text(
           label,
           style: GoogleFonts.poppins(
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.2,
-              color: BillifyColors.textSecondary),
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+            color: BillifyColors.textSecondary,
+          ),
         ),
         const SizedBox(height: 6),
         child,
@@ -1140,13 +1279,15 @@ class _ClientReelFormScreenState extends State<ClientReelFormScreen> {
       _existingReelCount = ReelEntry.countReels(d);
 
       // Lock editing flag — true only if this specific reel slot actually exists in Firestore
-      _isEditing = !widget.isNewClient && ReelEntry.reelExists(d, widget.reelIndex);
+      _isEditing =
+          !widget.isNewClient && ReelEntry.reelExists(d, widget.reelIndex);
 
       // Only prefill if editing existing reel
       if (_isEditing) {
         final reel = ReelEntry.fromMap(d, widget.reelIndex);
-        _amountCtrl.text =
-        reel.paymentAmount == 0 ? '' : reel.paymentAmount.toString();
+        _amountCtrl.text = reel.paymentAmount == 0
+            ? ''
+            : reel.paymentAmount.toString();
         _projectStartDate = reel.projectStartDate;
         _shootCategory = reel.shootCategory;
         _customShootCtrl.text = reel.customShootCategory;
@@ -1168,9 +1309,9 @@ class _ClientReelFormScreenState extends State<ClientReelFormScreen> {
       lastDate: DateTime(2035),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-          colorScheme: Theme.of(ctx)
-              .colorScheme
-              .copyWith(primary: ThemeController.to.primary),
+          colorScheme: Theme.of(
+            ctx,
+          ).colorScheme.copyWith(primary: ThemeController.to.primary),
         ),
         child: child!,
       ),
@@ -1178,21 +1319,25 @@ class _ClientReelFormScreenState extends State<ClientReelFormScreen> {
     if (date == null) return;
     final time = await showTimePicker(
       context: context,
-      initialTime:
-      TimeOfDay.fromDateTime(_projectStartDate ?? DateTime.now()),
+      initialTime: TimeOfDay.fromDateTime(_projectStartDate ?? DateTime.now()),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-          colorScheme: Theme.of(ctx)
-              .colorScheme
-              .copyWith(primary: ThemeController.to.primary),
+          colorScheme: Theme.of(
+            ctx,
+          ).colorScheme.copyWith(primary: ThemeController.to.primary),
         ),
         child: child!,
       ),
     );
     if (time == null) return;
     setState(() {
-      _projectStartDate =
-          DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _projectStartDate = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
     });
   }
 
@@ -1244,8 +1389,12 @@ class _ClientReelFormScreenState extends State<ClientReelFormScreen> {
         snackPosition: SnackPosition.TOP,
       );
     } catch (e) {
-      Get.snackbar('Error', 'Could not save reel. Try again.',
-          backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
+      Get.snackbar(
+        'Error',
+        'Could not save reel. Try again.',
+        backgroundColor: BillifyColors.unpaid,
+        colorText: Colors.white,
+      );
     }
     if (mounted) setState(() => _isSaving = false);
   }
@@ -1265,253 +1414,289 @@ class _ClientReelFormScreenState extends State<ClientReelFormScreen> {
       appBar: AppBar(
         backgroundColor: BillifyColors.background,
         leading: IconButton(
-          icon:
-          Icon(Icons.arrow_back_rounded, color: ThemeController.to.primary),
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            color: ThemeController.to.primary,
+          ),
           onPressed: () => Get.back(),
         ),
         title: Text(
           appBarTitle,
           style: GoogleFonts.poppins(
-              color: ThemeController.to.primary,
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2.0),
+            color: ThemeController.to.primary,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2.0,
+          ),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
-              height: 1, color: BillifyColors.outlineVariant.withOpacity(0.4)),
+            height: 1,
+            color: BillifyColors.outlineVariant.withOpacity(0.4),
+          ),
         ),
       ),
       body: _isFetching
           ? Center(
-          child: CircularProgressIndicator(color: ThemeController.to.primary))
+              child: CircularProgressIndicator(
+                color: ThemeController.to.primary,
+              ),
+            )
           : Column(
-        children: [
-          if (widget.isNewClient)
-            _StepIndicator(currentStep: 2, totalSteps: 2),
-          Expanded(
-            child: Form(
-              key: _formKey,
-              child: ListView(
-                padding:
-                const EdgeInsets.fromLTRB(16, 20, 16, 120),
-                children: [
-                  // ── Project date ───────────────────
-                  _SectionHeader(label: 'PROJECT SCHEDULE'),
-                  const SizedBox(height: 12),
-                  _buildField(
-                    label: 'PROJECT START DATE & TIME',
-                    child: GestureDetector(
-                      onTap: _pickDateTime,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: BillifyColors.surfaceLow,
-                          border: Border.all(
-                              color: BillifyColors.outlineVariant
-                                  .withOpacity(0.6)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.calendar_month_rounded,
-                                color: ThemeController.to.primary,
-                                size: 18),
-                            const SizedBox(width: 10),
-                            Text(
-                              _projectStartDate == null
-                                  ? 'Select date & time'
-                                  : DateFormat('dd MMM yyyy  hh:mm a')
-                                  .format(_projectStartDate!),
-                              style: GoogleFonts.nunito(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: _projectStartDate == null
-                                    ? BillifyColors.outlineVariant
-                                    : BillifyColors.textPrimary,
+              children: [
+                if (widget.isNewClient)
+                  _StepIndicator(currentStep: 2, totalSteps: 2),
+                Expanded(
+                  child: Form(
+                    key: _formKey,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 120),
+                      children: [
+                        // ── Project date ───────────────────
+                        _SectionHeader(label: 'PROJECT SCHEDULE'),
+                        const SizedBox(height: 12),
+                        _buildField(
+                          label: 'PROJECT START DATE & TIME',
+                          child: GestureDetector(
+                            onTap: _pickDateTime,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: BillifyColors.surfaceLow,
+                                border: Border.all(
+                                  color: BillifyColors.outlineVariant
+                                      .withOpacity(0.6),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.calendar_month_rounded,
+                                    color: ThemeController.to.primary,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    _projectStartDate == null
+                                        ? 'Select date & time'
+                                        : DateFormat(
+                                            'dd MMM yyyy  hh:mm a',
+                                          ).format(_projectStartDate!),
+                                    style: GoogleFonts.nunito(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: _projectStartDate == null
+                                          ? BillifyColors.outlineVariant
+                                          : BillifyColors.textPrimary,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  if (_projectStartDate != null)
+                                    GestureDetector(
+                                      onTap: () => setState(
+                                        () => _projectStartDate = null,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close_rounded,
+                                        size: 16,
+                                        color: BillifyColors.textSecondary,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
-                            const Spacer(),
-                            if (_projectStartDate != null)
-                              GestureDetector(
-                                onTap: () => setState(
-                                        () => _projectStartDate = null),
-                                child: const Icon(Icons.close_rounded,
-                                    size: 16,
-                                    color: BillifyColors.textSecondary),
-                              ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                  // ── Reel details ──────────────────
-                  _SectionHeader(label: 'REEL DETAILS'),
-                  const SizedBox(height: 12),
-                  _buildField(
-                    label: 'SHOOT CATEGORY *',
-                    child: _DropdownField<String>(
-                      value: _shootCategory,
-                      items: _kClientCategories,
-                      icon: Icons.camera_alt_rounded,
-                      onChanged: (v) =>
-                          setState(() => _shootCategory = v!),
-                    ),
-                  ),
-                  if (_shootCategory == 'Custom') ...[
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: _customShootCtrl,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: InputDecoration(
-                        hintText: 'Enter custom shoot category',
-                        prefixIcon: Icon(Icons.edit_rounded,
-                            color: ThemeController.to.primary, size: 16),
-                      ),
-                      validator: (v) =>
-                      _shootCategory == 'Custom' &&
-                          (v == null || v.trim().isEmpty)
-                          ? 'Custom shoot category is required'
-                          : null,
-                      style: GoogleFonts.nunito(
-                          fontWeight: FontWeight.w600, fontSize: 14),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  _buildField(
-                    label: 'REEL CATEGORY *',
-                    child: _DropdownField<String>(
-                      value: _reelCategory,
-                      items: _kReelCategories,
-                      icon: Icons.video_library_rounded,
-                      onChanged: (v) =>
-                          setState(() => _reelCategory = v!),
-                    ),
-                  ),
-                  if (_reelCategory == 'Custom') ...[
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: _customReelCtrl,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: InputDecoration(
-                        hintText: 'Enter custom reel category',
-                        prefixIcon: Icon(Icons.edit_rounded,
-                            color: ThemeController.to.primary, size: 16),
-                      ),
-                      validator: (v) =>
-                      _reelCategory == 'Custom' &&
-                          (v == null || v.trim().isEmpty)
-                          ? 'Custom reel category is required'
-                          : null,
-                      style: GoogleFonts.nunito(
-                          fontWeight: FontWeight.w600, fontSize: 14),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
+                        // ── Reel details ──────────────────
+                        _SectionHeader(label: 'REEL DETAILS'),
+                        const SizedBox(height: 12),
+                        _buildField(
+                          label: 'SHOOT CATEGORY *',
+                          child: _DropdownField<String>(
+                            value: _shootCategory,
+                            items: _kClientCategories,
+                            icon: Icons.camera_alt_rounded,
+                            onChanged: (v) =>
+                                setState(() => _shootCategory = v!),
+                          ),
+                        ),
+                        if (_shootCategory == 'Custom') ...[
+                          const SizedBox(height: 10),
+                          TextFormField(
+                            controller: _customShootCtrl,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: InputDecoration(
+                              hintText: 'Enter custom shoot category',
+                              prefixIcon: Icon(
+                                Icons.edit_rounded,
+                                color: ThemeController.to.primary,
+                                size: 16,
+                              ),
+                            ),
+                            validator: (v) =>
+                                _shootCategory == 'Custom' &&
+                                    (v == null || v.trim().isEmpty)
+                                ? 'Custom shoot category is required'
+                                : null,
+                            style: GoogleFonts.nunito(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 14),
+                        _buildField(
+                          label: 'REEL CATEGORY *',
+                          child: _DropdownField<String>(
+                            value: _reelCategory,
+                            items: _kReelCategories,
+                            icon: Icons.video_library_rounded,
+                            onChanged: (v) =>
+                                setState(() => _reelCategory = v!),
+                          ),
+                        ),
+                        if (_reelCategory == 'Custom') ...[
+                          const SizedBox(height: 10),
+                          TextFormField(
+                            controller: _customReelCtrl,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: InputDecoration(
+                              hintText: 'Enter custom reel category',
+                              prefixIcon: Icon(
+                                Icons.edit_rounded,
+                                color: ThemeController.to.primary,
+                                size: 16,
+                              ),
+                            ),
+                            validator: (v) =>
+                                _reelCategory == 'Custom' &&
+                                    (v == null || v.trim().isEmpty)
+                                ? 'Custom reel category is required'
+                                : null,
+                            style: GoogleFonts.nunito(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
 
-                  // ── Payment ────────────────────────
-                  _SectionHeader(label: 'PAYMENT DETAILS'),
-                  const SizedBox(height: 12),
-                  _buildField(
-                    label: 'PAYMENT AMOUNT *',
-                    child: TextFormField(
-                      controller: _amountCtrl,
-                      keyboardType:
-                      const TextInputType.numberWithOptions(
-                          decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                            RegExp(r'^\d*\.?\d{0,2}')),
+                        // ── Payment ────────────────────────
+                        _SectionHeader(label: 'PAYMENT DETAILS'),
+                        const SizedBox(height: 12),
+                        _buildField(
+                          label: 'PAYMENT AMOUNT *',
+                          child: TextFormField(
+                            controller: _amountCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d*\.?\d{0,2}'),
+                              ),
+                            ],
+                            decoration: InputDecoration(
+                              hintText: '0.00',
+                              prefixIcon: Icon(
+                                Icons.currency_rupee_rounded,
+                                color: ThemeController.to.primary,
+                                size: 18,
+                              ),
+                            ),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Payment amount is required'
+                                : null,
+                            style: GoogleFonts.nunito(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        _buildField(
+                          label: 'PAYMENT TYPE *',
+                          child: _DropdownField<String>(
+                            value: _paymentType,
+                            items: _kPaymentTypes,
+                            icon: Icons.payment_rounded,
+                            onChanged: (v) => setState(() => _paymentType = v!),
+                          ),
+                        ),
+                        if (_paymentType == 'Other') ...[
+                          const SizedBox(height: 10),
+                          TextFormField(
+                            controller: _customPaymentTypeCtrl,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: InputDecoration(
+                              hintText: 'Describe the payment method',
+                              prefixIcon: Icon(
+                                Icons.edit_rounded,
+                                color: ThemeController.to.primary,
+                                size: 16,
+                              ),
+                            ),
+                            validator: (v) =>
+                                _paymentType == 'Other' &&
+                                    (v == null || v.trim().isEmpty)
+                                ? 'Payment method description is required'
+                                : null,
+                            style: GoogleFonts.nunito(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 14),
+                        _buildField(
+                          label: 'PAYMENT STATUS *',
+                          child: _PaymentStatusSelector(
+                            selected: _paymentStatus,
+                            onSelect: (v) => setState(() => _paymentStatus = v),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+
+                        // ── Save button ────────────────────
+                        SizedBox(
+                          height: 52,
+                          child: ElevatedButton(
+                            onPressed: _isSaving ? null : _save,
+                            child: _isSaving
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    _isEditing
+                                        ? 'UPDATE REEL #${widget.reelIndex}'
+                                        : widget.isNewClient
+                                        ? 'FINISH & SAVE'
+                                        : 'SAVE REEL',
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                          ),
+                        ),
                       ],
-                      decoration: InputDecoration(
-                        hintText: '0.00',
-                        prefixIcon: Icon(Icons.currency_rupee_rounded,
-                            color: ThemeController.to.primary, size: 18),
-                      ),
-                      validator: (v) =>
-                      (v == null || v.trim().isEmpty)
-                          ? 'Payment amount is required'
-                          : null,
-                      style: GoogleFonts.nunito(
-                          fontWeight: FontWeight.w600, fontSize: 14),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  _buildField(
-                    label: 'PAYMENT TYPE *',
-                    child: _DropdownField<String>(
-                      value: _paymentType,
-                      items: _kPaymentTypes,
-                      icon: Icons.payment_rounded,
-                      onChanged: (v) =>
-                          setState(() => _paymentType = v!),
-                    ),
-                  ),
-                  if (_paymentType == 'Other') ...[
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: _customPaymentTypeCtrl,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: InputDecoration(
-                        hintText: 'Describe the payment method',
-                        prefixIcon: Icon(Icons.edit_rounded,
-                            color: ThemeController.to.primary, size: 16),
-                      ),
-                      validator: (v) =>
-                      _paymentType == 'Other' &&
-                          (v == null || v.trim().isEmpty)
-                          ? 'Payment method description is required'
-                          : null,
-                      style: GoogleFonts.nunito(
-                          fontWeight: FontWeight.w600, fontSize: 14),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  _buildField(
-                    label: 'PAYMENT STATUS *',
-                    child: _PaymentStatusSelector(
-                      selected: _paymentStatus,
-                      onSelect: (v) =>
-                          setState(() => _paymentStatus = v),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // ── Save button ────────────────────
-                  SizedBox(
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: _isSaving ? null : _save,
-                      child: _isSaving
-                          ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
-                          : Text(
-                        _isEditing
-                            ? 'UPDATE REEL #${widget.reelIndex}'
-                            : widget.isNewClient
-                            ? 'FINISH & SAVE'
-                            : 'SAVE REEL',
-                        style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                            letterSpacing: 1.5),
-                      ),
-                    ),
-                  ),
-
-
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1519,12 +1704,15 @@ class _ClientReelFormScreenState extends State<ClientReelFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: GoogleFonts.poppins(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-                color: BillifyColors.textSecondary)),
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+            color: BillifyColors.textSecondary,
+          ),
+        ),
         const SizedBox(height: 6),
         child,
       ],
@@ -1557,31 +1745,39 @@ class ClientDetailScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: BillifyColors.background,
         leading: IconButton(
-          icon:
-          Icon(Icons.arrow_back_rounded, color: ThemeController.to.primary),
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            color: ThemeController.to.primary,
+          ),
           onPressed: () => Get.back(),
         ),
         title: Text(
           'CLIENT PROFILE',
           style: GoogleFonts.poppins(
-              color: ThemeController.to.primary,
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2.0),
+            color: ThemeController.to.primary,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2.0,
+          ),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
-              height: 1, color: BillifyColors.outlineVariant.withOpacity(0.4)),
+            height: 1,
+            color: BillifyColors.outlineVariant.withOpacity(0.4),
+          ),
         ),
         actions: [
           // Edit client info button in AppBar
           IconButton(
-            icon: Icon(Icons.edit_rounded,
-                color: ThemeController.to.primary, size: 20),
+            icon: Icon(
+              Icons.edit_rounded,
+              color: ThemeController.to.primary,
+              size: 20,
+            ),
             tooltip: 'Edit client info',
             onPressed: () => Get.to(
-                  () => ClientInfoFormScreen(clientId: clientId),
+              () => ClientInfoFormScreen(clientId: clientId),
               transition: Transition.rightToLeft,
             ),
           ),
@@ -1597,8 +1793,10 @@ class ClientDetailScreen extends StatelessWidget {
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return Center(
-                child: CircularProgressIndicator(
-                    color: ThemeController.to.primary));
+              child: CircularProgressIndicator(
+                color: ThemeController.to.primary,
+              ),
+            );
           }
           if (!snap.hasData || !snap.data!.exists) {
             return const Center(child: Text('Client not found.'));
@@ -1652,24 +1850,31 @@ class ClientDetailScreen extends StatelessWidget {
                                 ? client.name[0].toUpperCase()
                                 : '?',
                             style: GoogleFonts.poppins(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white),
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(height: 10),
-                      Text(client.name,
-                          style: GoogleFonts.poppins(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white)),
+                      Text(
+                        client.name,
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
                       if (client.mobile.isNotEmpty) ...[
                         const SizedBox(height: 4),
-                        Text(client.mobile,
-                            style: GoogleFonts.nunito(
-                                fontSize: 13,
-                                color: Colors.white.withOpacity(0.75))),
+                        Text(
+                          client.mobile,
+                          style: GoogleFonts.nunito(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.75),
+                          ),
+                        ),
                       ],
                       const SizedBox(height: 8),
                       // Category + reel count badges
@@ -1678,8 +1883,9 @@ class ClientDetailScreen extends StatelessWidget {
                         children: [
                           _heroBadge(client.displayCategory),
                           _heroBadge(
-                              '${client.reelCount} REEL${client.reelCount > 1 ? 'S' : ''}',
-                              icon: Icons.video_library_rounded),
+                            '${client.reelCount} REEL${client.reelCount > 1 ? 'S' : ''}',
+                            icon: Icons.video_library_rounded,
+                          ),
                         ],
                       ),
                     ],
@@ -1690,7 +1896,9 @@ class ClientDetailScreen extends StatelessWidget {
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 16),
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   color: c.card,
                   child: Row(
                     children: [
@@ -1703,19 +1911,21 @@ class ClientDetailScreen extends StatelessWidget {
                                   ? 'TOTAL (ALL REELS)'
                                   : 'TOTAL PAYMENT',
                               style: GoogleFonts.poppins(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 1.2,
-                                  color: c.textSecondary),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.2,
+                                color: c.textSecondary,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               '₹${fmt.format(client.totalPaymentAmount)}',
                               style: GoogleFonts.poppins(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w900,
-                                  color: ThemeController.to.primary,
-                                  letterSpacing: -1),
+                                fontSize: 24,
+                                fontWeight: FontWeight.w900,
+                                color: ThemeController.to.primary,
+                                letterSpacing: -1,
+                              ),
                             ),
                           ],
                         ),
@@ -1748,28 +1958,36 @@ class ClientDetailScreen extends StatelessWidget {
               // Add reel quick action
               GestureDetector(
                 onTap: () => Get.to(
-                      () => ClientReelFormScreen(
+                  () => ClientReelFormScreen(
                     clientId: clientId,
                     reelIndex: client.reelCount + 1,
                   ),
                   transition: Transition.rightToLeft,
                 ),
                 child: Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   color: ThemeController.to.primary.withOpacity(0.1),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.add_rounded,
-                          size: 13, color: ThemeController.to.primary),
+                      Icon(
+                        Icons.add_rounded,
+                        size: 13,
+                        color: ThemeController.to.primary,
+                      ),
                       const SizedBox(width: 4),
-                      Text('ADD REEL',
-                          style: GoogleFonts.poppins(
-                              fontSize: 8,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
-                              color: ThemeController.to.primary)),
+                      Text(
+                        'ADD REEL',
+                        style: GoogleFonts.poppins(
+                          fontSize: 8,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: ThemeController.to.primary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1788,7 +2006,12 @@ class ClientDetailScreen extends StatelessWidget {
               totalReels: client.reelCount,
               clientId: clientId,
               onDelete: client.reelCount > 1
-                  ? () => _confirmDeleteReel(context, clientId, reel, client.reelCount)
+                  ? () => _confirmDeleteReel(
+                      context,
+                      clientId,
+                      reel,
+                      client.reelCount,
+                    )
                   : null,
             );
           }),
@@ -1800,12 +2023,16 @@ class ClientDetailScreen extends StatelessWidget {
             rows: [
               _DetailRow(
                 label: 'Created',
-                value: DateFormat('dd MMM yyyy  hh:mm a').format(client.createdAt),
+                value: DateFormat(
+                  'dd MMM yyyy  hh:mm a',
+                ).format(client.createdAt),
                 icon: Icons.add_circle_outline_rounded,
               ),
               _DetailRow(
                 label: 'Last Updated',
-                value: DateFormat('dd MMM yyyy  hh:mm a').format(client.updatedAt),
+                value: DateFormat(
+                  'dd MMM yyyy  hh:mm a',
+                ).format(client.updatedAt),
                 icon: Icons.update_rounded,
               ),
             ],
@@ -1829,18 +2056,23 @@ class ClientDetailScreen extends StatelessWidget {
           Text(
             label.toUpperCase(),
             style: GoogleFonts.poppins(
-                fontSize: 8,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.8,
-                color: Colors.white),
+              fontSize: 8,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: Colors.white,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _confirmDeleteReel(BuildContext context, String clientId,
-      ReelEntry reel, int totalReels) async {
+  Future<void> _confirmDeleteReel(
+    BuildContext context,
+    String clientId,
+    ReelEntry reel,
+    int totalReels,
+  ) async {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     final confirm = await showDialog<bool>(
       context: context,
@@ -1849,7 +2081,7 @@ class ClientDetailScreen extends StatelessWidget {
         iconColor: BillifyColors.unpaid,
         title: 'Delete Reel #${reel.index}',
         body:
-        'Remove reel #${reel.index} from this client? This cannot be undone.',
+            'Remove reel #${reel.index} from this client? This cannot be undone.',
         confirmLabel: 'Delete',
         confirmColor: BillifyColors.unpaid,
         onConfirm: () => Navigator.of(ctx).pop(true),
@@ -1890,14 +2122,16 @@ class ClientDetailScreen extends StatelessWidget {
         );
         batch.addAll(shifted.toFields());
         // Delete the old slot at position i (now shifted to i-1)
-        batch.addAll(ReelEntry(
-          index: i,
-          shootCategory: '',
-          reelCategory: '',
-          paymentAmount: 0,
-          paymentType: '',
-          paymentStatus: '',
-        ).toDeleteFields());
+        batch.addAll(
+          ReelEntry(
+            index: i,
+            shootCategory: '',
+            reelCategory: '',
+            paymentAmount: 0,
+            paymentType: '',
+            paymentStatus: '',
+          ).toDeleteFields(),
+        );
       }
 
       batch['updatedAt'] = FieldValue.serverTimestamp();
@@ -1909,13 +2143,20 @@ class ClientDetailScreen extends StatelessWidget {
           .doc(clientId)
           .update(batch);
 
-      Get.snackbar('Deleted', 'Reel #${reel.index} removed.',
-          backgroundColor: BillifyColors.paid,
-          colorText: Colors.white,
-          snackPosition: SnackPosition.TOP);
+      Get.snackbar(
+        'Deleted',
+        'Reel #${reel.index} removed.',
+        backgroundColor: BillifyColors.paid,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.TOP,
+      );
     } catch (e) {
-      Get.snackbar('Error', 'Could not delete reel.',
-          backgroundColor: BillifyColors.unpaid, colorText: Colors.white);
+      Get.snackbar(
+        'Error',
+        'Could not delete reel.',
+        backgroundColor: BillifyColors.unpaid,
+        colorText: Colors.white,
+      );
     }
   }
 }
@@ -1961,9 +2202,7 @@ class _ReelDetailCardState extends State<_ReelDetailCard> {
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: c.card,
-        border: Border(
-          left: BorderSide(color: statusColor, width: 3),
-        ),
+        border: Border(left: BorderSide(color: statusColor, width: 3)),
       ),
       child: Column(
         children: [
@@ -1975,18 +2214,21 @@ class _ReelDetailCardState extends State<_ReelDetailCard> {
               child: Row(
                 children: [
                   Container(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     color: ThemeController.to.primary.withOpacity(0.1),
                     child: Text(
                       widget.totalReels > 1
                           ? 'REEL ${widget.reelNumber}'
                           : 'REEL',
                       style: GoogleFonts.poppins(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
-                          color: ThemeController.to.primary),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
+                        color: ThemeController.to.primary,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1994,9 +2236,10 @@ class _ReelDetailCardState extends State<_ReelDetailCard> {
                     child: Text(
                       widget.reel.displayReelCategory,
                       style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: c.textPrimary),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: c.textPrimary,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -2004,29 +2247,36 @@ class _ReelDetailCardState extends State<_ReelDetailCard> {
                   Text(
                     '₹${fmt.format(widget.reel.paymentAmount)}',
                     style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: c.textPrimary),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: c.textPrimary,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   // Status badge
                   Container(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     color: statusBg,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(_paymentStatusIcon(widget.reel.paymentStatus),
-                            size: 9, color: statusColor),
+                        Icon(
+                          _paymentStatusIcon(widget.reel.paymentStatus),
+                          size: 9,
+                          color: statusColor,
+                        ),
                         const SizedBox(width: 3),
                         Text(
                           widget.reel.paymentStatus.toUpperCase(),
                           style: GoogleFonts.poppins(
-                              fontSize: 7,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.6,
-                              color: statusColor),
+                            fontSize: 7,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                            color: statusColor,
+                          ),
                         ),
                       ],
                     ),
@@ -2053,8 +2303,9 @@ class _ReelDetailCardState extends State<_ReelDetailCard> {
             firstChild: Column(
               children: [
                 Container(
-                    height: 0.5,
-                    color: BillifyColors.outlineVariant.withOpacity(0.5)),
+                  height: 0.5,
+                  color: BillifyColors.outlineVariant.withOpacity(0.5),
+                ),
                 _DetailRow(
                   label: 'Shoot Category',
                   value: widget.reel.displayShootCategory,
@@ -2063,8 +2314,9 @@ class _ReelDetailCardState extends State<_ReelDetailCard> {
                 if (widget.reel.projectStartDate != null)
                   _DetailRow(
                     label: 'Start Date & Time',
-                    value: DateFormat('dd MMM yyyy  hh:mm a')
-                        .format(widget.reel.projectStartDate!),
+                    value: DateFormat(
+                      'dd MMM yyyy  hh:mm a',
+                    ).format(widget.reel.projectStartDate!),
                     icon: Icons.calendar_month_rounded,
                   ),
                 _DetailRow(
@@ -2080,18 +2332,21 @@ class _ReelDetailCardState extends State<_ReelDetailCard> {
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () => Get.to(
-                                () => ClientReelFormScreen(
+                            () => ClientReelFormScreen(
                               clientId: widget.clientId,
                               reelIndex: widget.reel.index,
                             ),
                             transition: Transition.rightToLeft,
                           ),
                           icon: const Icon(Icons.edit_rounded, size: 14),
-                          label: Text('EDIT REEL',
-                              style: GoogleFonts.poppins(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 1.0)),
+                          label: Text(
+                            'EDIT REEL',
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(0, 38),
                           ),
@@ -2103,17 +2358,25 @@ class _ReelDetailCardState extends State<_ReelDetailCard> {
                           height: 38,
                           child: OutlinedButton.icon(
                             onPressed: widget.onDelete,
-                            icon: const Icon(Icons.delete_outline_rounded,
-                                size: 14, color: BillifyColors.unpaid),
-                            label: Text('REMOVE',
-                                style: GoogleFonts.poppins(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 1.0,
-                                    color: BillifyColors.unpaid)),
+                            icon: const Icon(
+                              Icons.delete_outline_rounded,
+                              size: 14,
+                              color: BillifyColors.unpaid,
+                            ),
+                            label: Text(
+                              'REMOVE',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.0,
+                                color: BillifyColors.unpaid,
+                              ),
+                            ),
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(
-                                  color: BillifyColors.unpaid, width: 1.5),
+                                color: BillifyColors.unpaid,
+                                width: 1.5,
+                              ),
                               minimumSize: const Size(0, 38),
                             ),
                           ),
@@ -2136,22 +2399,33 @@ class _QuickStat extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  const _QuickStat(
-      {required this.label, required this.value, required this.color});
+  const _QuickStat({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.center,
     children: [
-      Text(value,
-          style: GoogleFonts.poppins(
-              fontSize: 14, fontWeight: FontWeight.w900, color: color)),
-      Text(label,
-          style: GoogleFonts.poppins(
-              fontSize: 8,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
-              color: BillifyColors.textSecondary)),
+      Text(
+        value,
+        style: GoogleFonts.poppins(
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+          color: color,
+        ),
+      ),
+      Text(
+        label,
+        style: GoogleFonts.poppins(
+          fontSize: 8,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+          color: BillifyColors.textSecondary,
+        ),
+      ),
     ],
   );
 }
@@ -2171,22 +2445,25 @@ class _DetailCard extends StatelessWidget {
         children: [
           if (title.isNotEmpty)
             Container(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               color: BillifyColors.surfaceContainer,
               child: Row(
                 children: [
                   Container(
-                      width: 3,
-                      height: 12,
-                      color: ThemeController.to.primary),
+                    width: 3,
+                    height: 12,
+                    color: ThemeController.to.primary,
+                  ),
                   const SizedBox(width: 8),
-                  Text(title,
-                      style: GoogleFonts.poppins(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.4,
-                          color: ThemeController.to.primary)),
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.4,
+                      color: ThemeController.to.primary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2197,9 +2474,10 @@ class _DetailCard extends StatelessWidget {
                 e.value,
                 if (!isLast)
                   Container(
-                      height: 0.5,
-                      color: BillifyColors.outlineVariant.withOpacity(0.4),
-                      margin: const EdgeInsets.symmetric(horizontal: 16)),
+                    height: 0.5,
+                    color: BillifyColors.outlineVariant.withOpacity(0.4),
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
               ],
             );
           }),
@@ -2229,24 +2507,32 @@ class _DetailRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Icon(icon,
-              size: 16,
-              color: ThemeController.to.primary.withOpacity(0.7)),
+          Icon(
+            icon,
+            size: 16,
+            color: ThemeController.to.primary.withOpacity(0.7),
+          ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(label,
-                style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: c.textSecondary)),
+            child: Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: c.textSecondary,
+              ),
+            ),
           ),
           Flexible(
-            child: Text(value,
-                textAlign: TextAlign.right,
-                style: GoogleFonts.nunito(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: valueColor ?? c.textPrimary)),
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: GoogleFonts.nunito(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: valueColor ?? c.textPrimary,
+              ),
+            ),
           ),
         ],
       ),
@@ -2265,7 +2551,8 @@ class _ClientFilterSheet extends StatefulWidget {
   final DateTime? dateFrom;
   final DateTime? dateTo;
   final String sortOrder;
-  final void Function(String?, String?, String?, DateTime?, DateTime?, String) onApply;
+  final void Function(String?, String?, String?, DateTime?, DateTime?, String)
+  onApply;
 
   const _ClientFilterSheet({
     this.selectedStatus,
@@ -2290,22 +2577,22 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
   String _sortOrder = 'newest';
 
   static const _kSortOptions = [
-    ('newest',      'Newest First',  Icons.arrow_downward_rounded),
-    ('oldest',      'Oldest First',  Icons.arrow_upward_rounded),
-    ('name_asc',    'Name A → Z',    Icons.sort_by_alpha_rounded),
-    ('name_desc',   'Name Z → A',    Icons.sort_by_alpha_rounded),
+    ('newest', 'Newest First', Icons.arrow_downward_rounded),
+    ('oldest', 'Oldest First', Icons.arrow_upward_rounded),
+    ('name_asc', 'Name A → Z', Icons.sort_by_alpha_rounded),
+    ('name_desc', 'Name Z → A', Icons.sort_by_alpha_rounded),
     ('amount_desc', 'Amount High→Low', Icons.trending_down_rounded),
-    ('amount_asc',  'Amount Low→High', Icons.trending_up_rounded),
+    ('amount_asc', 'Amount Low→High', Icons.trending_up_rounded),
   ];
 
   @override
   void initState() {
     super.initState();
-    _status   = widget.selectedStatus;
-    _reel     = widget.selectedReel;
+    _status = widget.selectedStatus;
+    _reel = widget.selectedReel;
     _category = widget.selectedCategory;
     _dateFrom = widget.dateFrom;
-    _dateTo   = widget.dateTo;
+    _dateTo = widget.dateTo;
     _sortOrder = widget.sortOrder;
   }
 
@@ -2349,7 +2636,11 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
     return Container(
       color: BillifyColors.surface,
       padding: EdgeInsets.fromLTRB(
-          20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 36),
+        20,
+        16,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 36,
+      ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2357,68 +2648,89 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
           children: [
             Container(height: 3, color: ThemeController.to.primary),
             const SizedBox(height: 16),
-            Text('FILTER & SORT CLIENTS',
-                style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.5,
-                    color: ThemeController.to.primary)),
+            Text(
+              'FILTER & SORT CLIENTS',
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.5,
+                color: ThemeController.to.primary,
+              ),
+            ),
             const SizedBox(height: 16),
 
             // ── Payment Status ────────────────────────────────
-            _filterGroup('PAYMENT STATUS', _kPaymentStatuses, _status,
-                    (v) => setState(() => _status = _status == v ? null : v)),
+            _filterGroup(
+              'PAYMENT STATUS',
+              _kPaymentStatuses,
+              _status,
+              (v) => setState(() => _status = _status == v ? null : v),
+            ),
             const SizedBox(height: 12),
 
-            // ── Client Category ───────────────────────────────
+            // ── Shoot Category ────────────────────────────────
             _filterGroup(
-                'CLIENT CATEGORY',
-                _kClientCategories.where((c) => c != 'Custom').toList(),
-                _category,
-                    (v) => setState(() => _category = _category == v ? null : v)),
+              'SHOOT CATEGORY',
+              _kClientCategories.where((c) => c != 'Custom').toList(),
+              _category,
+              (v) => setState(() => _category = _category == v ? null : v),
+            ),
             const SizedBox(height: 12),
 
             // ── Reel Category ─────────────────────────────────
             _filterGroup(
-                'REEL CATEGORY',
-                _kReelCategories.where((c) => c != 'Custom').toList(),
-                _reel,
-                    (v) => setState(() => _reel = _reel == v ? null : v)),
+              'REEL CATEGORY',
+              _kReelCategories.where((c) => c != 'Custom').toList(),
+              _reel,
+              (v) => setState(() => _reel = _reel == v ? null : v),
+            ),
             const SizedBox(height: 16),
 
             // ── Custom Date Range ─────────────────────────────
-            Text('DATE RANGE (Created)',
-                style: GoogleFonts.poppins(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                    color: BillifyColors.textSecondary)),
+            Text(
+              'DATE RANGE (Created)',
+              style: GoogleFonts.poppins(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: BillifyColors.textSecondary,
+              ),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
                   child: _DatePickerTile(
                     label: 'FROM',
-                    value: _dateFrom != null ? dateFmt.format(_dateFrom!) : null,
+                    value: _dateFrom != null
+                        ? dateFmt.format(_dateFrom!)
+                        : null,
                     onTap: _pickDateFrom,
-                    onClear: _dateFrom != null ? () => setState(() => _dateFrom = null) : null,
+                    onClear: _dateFrom != null
+                        ? () => setState(() => _dateFrom = null)
+                        : null,
                   ),
                 ),
                 Container(
                   width: 24,
                   alignment: Alignment.center,
-                  child: Text('–',
-                      style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: BillifyColors.textSecondary)),
+                  child: Text(
+                    '–',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: BillifyColors.textSecondary,
+                    ),
+                  ),
                 ),
                 Expanded(
                   child: _DatePickerTile(
                     label: 'TO',
                     value: _dateTo != null ? dateFmt.format(_dateTo!) : null,
                     onTap: _pickDateTo,
-                    onClear: _dateTo != null ? () => setState(() => _dateTo = null) : null,
+                    onClear: _dateTo != null
+                        ? () => setState(() => _dateTo = null)
+                        : null,
                   ),
                 ),
               ],
@@ -2426,12 +2738,15 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
             const SizedBox(height: 16),
 
             // ── Sort By ───────────────────────────────────────
-            Text('SORT BY',
-                style: GoogleFonts.poppins(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                    color: BillifyColors.textSecondary)),
+            Text(
+              'SORT BY',
+              style: GoogleFonts.poppins(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: BillifyColors.textSecondary,
+              ),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
@@ -2443,7 +2758,10 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
                   onTap: () => setState(() => _sortOrder = value),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 140),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: isSel
                           ? ThemeController.to.primary
@@ -2457,16 +2775,25 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(icon,
-                            size: 11,
-                            color: isSel ? Colors.white : BillifyColors.textSecondary),
+                        Icon(
+                          icon,
+                          size: 11,
+                          color: isSel
+                              ? Colors.white
+                              : BillifyColors.textSecondary,
+                        ),
                         const SizedBox(width: 5),
-                        Text(label,
-                            style: GoogleFonts.poppins(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.4,
-                                color: isSel ? Colors.white : BillifyColors.textPrimary)),
+                        Text(
+                          label,
+                          style: GoogleFonts.poppins(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.4,
+                            color: isSel
+                                ? Colors.white
+                                : BillifyColors.textPrimary,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -2481,32 +2808,45 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => setState(() {
-                      _status   = null;
-                      _reel     = null;
+                      _status = null;
+                      _reel = null;
                       _category = null;
                       _dateFrom = null;
-                      _dateTo   = null;
+                      _dateTo = null;
                       _sortOrder = 'newest';
                     }),
-                    child: Text('CLEAR',
-                        style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
-                            letterSpacing: 1.2)),
+                    child: Text(
+                      'CLEAR',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
-                      widget.onApply(_status, _reel, _category, _dateFrom, _dateTo, _sortOrder);
+                      widget.onApply(
+                        _status,
+                        _reel,
+                        _category,
+                        _dateFrom,
+                        _dateTo,
+                        _sortOrder,
+                      );
                       Get.back();
                     },
-                    child: Text('APPLY',
-                        style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
-                            letterSpacing: 1.2)),
+                    child: Text(
+                      'APPLY',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -2517,17 +2857,24 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
     );
   }
 
-  Widget _filterGroup(String title, List<String> options, String? selected,
-      ValueChanged<String> onTap) {
+  Widget _filterGroup(
+    String title,
+    List<String> options,
+    String? selected,
+    ValueChanged<String> onTap,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title,
-            style: GoogleFonts.poppins(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-                color: BillifyColors.textSecondary)),
+        Text(
+          title,
+          style: GoogleFonts.poppins(
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+            color: BillifyColors.textSecondary,
+          ),
+        ),
         const SizedBox(height: 8),
         Wrap(
           spacing: 6,
@@ -2538,8 +2885,10 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
               onTap: () => onTap(o),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 140),
-                padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: isSel
                       ? ThemeController.to.primary
@@ -2550,12 +2899,15 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
                         : BillifyColors.outlineVariant,
                   ),
                 ),
-                child: Text(o,
-                    style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                        color: isSel ? Colors.white : BillifyColors.textPrimary)),
+                child: Text(
+                  o,
+                  style: GoogleFonts.poppins(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: isSel ? Colors.white : BillifyColors.textPrimary,
+                  ),
+                ),
               ),
             );
           }).toList(),
@@ -2600,32 +2952,38 @@ class _DatePickerTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.calendar_today_rounded,
-                size: 13,
-                color: hasValue
-                    ? ThemeController.to.primary
-                    : BillifyColors.textSecondary),
+            Icon(
+              Icons.calendar_today_rounded,
+              size: 13,
+              color: hasValue
+                  ? ThemeController.to.primary
+                  : BillifyColors.textSecondary,
+            ),
             const SizedBox(width: 6),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label,
-                      style: GoogleFonts.poppins(
-                          fontSize: 7,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
-                          color: hasValue
-                              ? ThemeController.to.primary
-                              : BillifyColors.textSecondary)),
+                  Text(
+                    label,
+                    style: GoogleFonts.poppins(
+                      fontSize: 7,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      color: hasValue
+                          ? ThemeController.to.primary
+                          : BillifyColors.textSecondary,
+                    ),
+                  ),
                   Text(
                     value ?? 'Any date',
                     style: GoogleFonts.nunito(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: hasValue
-                            ? BillifyColors.textPrimary
-                            : BillifyColors.textSecondary),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: hasValue
+                          ? BillifyColors.textPrimary
+                          : BillifyColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -2633,8 +2991,11 @@ class _DatePickerTile extends StatelessWidget {
             if (onClear != null)
               GestureDetector(
                 onTap: onClear,
-                child: Icon(Icons.close_rounded,
-                    size: 14, color: ThemeController.to.primary),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: ThemeController.to.primary,
+                ),
               ),
           ],
         ),
@@ -2691,24 +3052,31 @@ class _StepIndicator extends StatelessWidget {
                     : BillifyColors.surfaceLow,
                 child: Center(
                   child: isDone
-                      ? const Icon(Icons.check_rounded,
-                      size: 14, color: Colors.white)
-                      : Text('$step',
-                      style: GoogleFonts.poppins(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: isCurrent
-                              ? Colors.white
-                              : BillifyColors.textSecondary)),
+                      ? const Icon(
+                          Icons.check_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        )
+                      : Text(
+                          '$step',
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: isCurrent
+                                ? Colors.white
+                                : BillifyColors.textSecondary,
+                          ),
+                        ),
                 ),
               ),
               const SizedBox(width: 6),
               Text(
                 step <= labels.length ? labels[step - 1] : 'Step $step',
                 style: GoogleFonts.poppins(
-                    fontSize: 10,
-                    fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
-                    color: color),
+                  fontSize: 10,
+                  fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+                  color: color,
+                ),
               ),
             ],
           );
@@ -2737,25 +3105,32 @@ class DashboardRecentClients extends StatelessWidget {
           Row(
             children: [
               Container(
-                  width: 3,
-                  height: 14,
-                  color: ThemeController.to.primary),
+                width: 3,
+                height: 14,
+                color: ThemeController.to.primary,
+              ),
               const SizedBox(width: 8),
-              Text('RECENT CLIENTS',
-                  style: GoogleFonts.poppins(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.8,
-                      color: ThemeController.to.primary)),
+              Text(
+                'RECENT CLIENTS',
+                style: GoogleFonts.poppins(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.8,
+                  color: ThemeController.to.primary,
+                ),
+              ),
               const Spacer(),
               GestureDetector(
                 onTap: () => Get.toNamed(AppRoutes.clients),
-                child: Text('VIEW ALL →',
-                    style: GoogleFonts.poppins(
-                        fontSize: 8,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
-                        color: ThemeController.to.primary)),
+                child: Text(
+                  'VIEW ALL →',
+                  style: GoogleFonts.poppins(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    color: ThemeController.to.primary,
+                  ),
+                ),
               ),
             ],
           ),
@@ -2771,16 +3146,20 @@ class DashboardRecentClients extends StatelessWidget {
             builder: (ctx, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
                 return Center(
-                    child: CircularProgressIndicator(
-                        color: ThemeController.to.primary, strokeWidth: 2));
+                  child: CircularProgressIndicator(
+                    color: ThemeController.to.primary,
+                    strokeWidth: 2,
+                  ),
+                );
               }
               final docs = snap.data?.docs ?? [];
               if (docs.isEmpty) return _DashboardEmptyClients();
-              final clients =
-              docs.map((d) => ClientModel.fromDoc(d)).toList();
+              final clients = docs.map((d) => ClientModel.fromDoc(d)).toList();
               return Column(
-                  children:
-                  clients.map((c) => _DashboardClientRow(client: c)).toList());
+                children: clients
+                    .map((c) => _DashboardClientRow(client: c))
+                    .toList(),
+              );
             },
           ),
           const SizedBox(height: 8),
@@ -2792,21 +3171,28 @@ class DashboardRecentClients extends StatelessWidget {
               decoration: BoxDecoration(
                 color: ThemeController.to.primary.withOpacity(0.06),
                 border: Border.all(
-                    color: ThemeController.to.primary.withOpacity(0.2),
-                    width: 1),
+                  color: ThemeController.to.primary.withOpacity(0.2),
+                  width: 1,
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.person_add_rounded,
-                      size: 14, color: ThemeController.to.primary),
+                  Icon(
+                    Icons.person_add_rounded,
+                    size: 14,
+                    color: ThemeController.to.primary,
+                  ),
                   const SizedBox(width: 8),
-                  Text('ADD NEW CLIENT',
-                      style: GoogleFonts.poppins(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
-                          color: ThemeController.to.primary)),
+                  Text(
+                    'ADD NEW CLIENT',
+                    style: GoogleFonts.poppins(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                      color: ThemeController.to.primary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2842,9 +3228,10 @@ class _DashboardClientRow extends StatelessWidget {
                 child: Text(
                   client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
                   style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: ThemeController.to.primary),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: ThemeController.to.primary,
+                  ),
                 ),
               ),
             ),
@@ -2853,37 +3240,49 @@ class _DashboardClientRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(client.name,
-                      style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: c.textPrimary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  Text(client.displayCategory,
-                      style: GoogleFonts.nunito(
-                          fontSize: 11, color: c.textSecondary)),
+                  Text(
+                    client.name,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: c.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    client.displayShootCategories.join(' / '),
+                    style: GoogleFonts.nunito(
+                      fontSize: 11,
+                      color: c.textSecondary,
+                    ),
+                  ),
                 ],
               ),
             ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('₹${fmt.format(client.totalPaymentAmount)}',
-                    style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: c.textPrimary)),
-                Text(client.paymentStatus,
-                    style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: statusColor)),
+                Text(
+                  '₹${fmt.format(client.totalPaymentAmount)}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: c.textPrimary,
+                  ),
+                ),
+                Text(
+                  client.paymentStatus,
+                  style: GoogleFonts.poppins(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: statusColor,
+                  ),
+                ),
               ],
             ),
             const SizedBox(width: 4),
-            Icon(Icons.chevron_right_rounded,
-                size: 16, color: c.textSecondary),
+            Icon(Icons.chevron_right_rounded, size: 16, color: c.textSecondary),
           ],
         ),
       ),
@@ -2902,13 +3301,20 @@ class _DashboardEmptyClients extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             color: ThemeController.to.primary.withOpacity(0.1),
-            child: Icon(Icons.people_outline_rounded,
-                color: ThemeController.to.primary, size: 20),
+            child: Icon(
+              Icons.people_outline_rounded,
+              color: ThemeController.to.primary,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 12),
-          Text('No clients yet. Add your first client!',
-              style:
-              GoogleFonts.nunito(fontSize: 13, color: BillifyColors.textSecondary)),
+          Text(
+            'No clients yet. Add your first client!',
+            style: GoogleFonts.nunito(
+              fontSize: 13,
+              color: BillifyColors.textSecondary,
+            ),
+          ),
         ],
       ),
     );
@@ -2927,15 +3333,17 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(
-            width: 3, height: 14, color: ThemeController.to.primary),
+        Container(width: 3, height: 14, color: ThemeController.to.primary),
         const SizedBox(width: 8),
-        Text(label,
-            style: GoogleFonts.poppins(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.8,
-                color: ThemeController.to.primary)),
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.8,
+            color: ThemeController.to.primary,
+          ),
+        ),
       ],
     );
   }
@@ -2953,23 +3361,28 @@ class _FilterChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: ThemeController.to.primary.withOpacity(0.1),
-        border:
-        Border.all(color: ThemeController.to.primary.withOpacity(0.4)),
+        border: Border.all(color: ThemeController.to.primary.withOpacity(0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label.toUpperCase(),
-              style: GoogleFonts.poppins(
-                  fontSize: 8,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                  color: ThemeController.to.primary)),
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.poppins(
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: ThemeController.to.primary,
+            ),
+          ),
           const SizedBox(width: 4),
           GestureDetector(
             onTap: onRemove,
-            child: Icon(Icons.close_rounded,
-                size: 12, color: ThemeController.to.primary),
+            child: Icon(
+              Icons.close_rounded,
+              size: 12,
+              color: ThemeController.to.primary,
+            ),
           ),
         ],
       ),
@@ -2992,17 +3405,21 @@ class _EmptyClientState extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(20),
               color: ThemeController.to.primary.withOpacity(0.08),
-              child: Icon(Icons.people_outline_rounded,
-                  size: 48, color: ThemeController.to.primary),
+              child: Icon(
+                Icons.people_outline_rounded,
+                size: 48,
+                color: ThemeController.to.primary,
+              ),
             ),
             const SizedBox(height: 20),
             Text(
               hasFilter ? 'NO MATCHES' : 'NO CLIENTS YET',
               style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
-                  color: BillifyColors.textPrimary),
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.5,
+                color: BillifyColors.textPrimary,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -3011,20 +3428,24 @@ class _EmptyClientState extends StatelessWidget {
                   : 'Add your first client to start tracking projects.',
               textAlign: TextAlign.center,
               style: GoogleFonts.nunito(
-                  fontSize: 13,
-                  color: BillifyColors.textSecondary,
-                  height: 1.5),
+                fontSize: 13,
+                color: BillifyColors.textSecondary,
+                height: 1.5,
+              ),
             ),
             if (!hasFilter) ...[
               const SizedBox(height: 24),
               ElevatedButton.icon(
                 onPressed: () => Get.toNamed(AppRoutes.clientAdd),
                 icon: const Icon(Icons.person_add_rounded, size: 16),
-                label: Text('ADD FIRST CLIENT',
-                    style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11,
-                        letterSpacing: 1.2)),
+                label: Text(
+                  'ADD FIRST CLIENT',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                    letterSpacing: 1.2,
+                  ),
+                ),
               ),
             ],
           ],
@@ -3046,18 +3467,28 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline_rounded,
-                size: 40, color: BillifyColors.unpaid),
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 40,
+              color: BillifyColors.unpaid,
+            ),
             const SizedBox(height: 12),
-            Text('Something went wrong',
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w700,
-                    color: BillifyColors.textPrimary)),
+            Text(
+              'Something went wrong',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700,
+                color: BillifyColors.textPrimary,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text(message,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.nunito(
-                    fontSize: 12, color: BillifyColors.textSecondary)),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.nunito(
+                fontSize: 12,
+                color: BillifyColors.textSecondary,
+              ),
+            ),
           ],
         ),
       ),
@@ -3090,16 +3521,19 @@ class _DropdownField<T> extends StatelessWidget {
       decoration: InputDecoration(
         prefixIcon: Icon(icon, color: ThemeController.to.primary, size: 18),
       ),
-      icon: const Icon(Icons.expand_more_rounded,
-          color: BillifyColors.textSecondary, size: 18),
+      icon: const Icon(
+        Icons.expand_more_rounded,
+        color: BillifyColors.textSecondary,
+        size: 18,
+      ),
       style: GoogleFonts.nunito(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: BillifyColors.textPrimary),
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: BillifyColors.textPrimary,
+      ),
       dropdownColor: BillifyColors.surface,
       items: items
-          .map((e) =>
-          DropdownMenuItem<T>(value: e, child: Text(e.toString())))
+          .map((e) => DropdownMenuItem<T>(value: e, child: Text(e.toString())))
           .toList(),
       onChanged: onChanged,
     );
@@ -3110,8 +3544,10 @@ class _PaymentStatusSelector extends StatelessWidget {
   final String selected;
   final ValueChanged<String> onSelect;
 
-  const _PaymentStatusSelector(
-      {required this.selected, required this.onSelect});
+  const _PaymentStatusSelector({
+    required this.selected,
+    required this.onSelect,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -3126,8 +3562,7 @@ class _PaymentStatusSelector extends StatelessWidget {
           onTap: () => onSelect(s),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
-            padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: isSelected ? bg : BillifyColors.surfaceLow,
               border: Border.all(
@@ -3138,18 +3573,21 @@ class _PaymentStatusSelector extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(_paymentStatusIcon(s),
-                    size: 13,
-                    color: isSelected ? color : BillifyColors.textSecondary),
+                Icon(
+                  _paymentStatusIcon(s),
+                  size: 13,
+                  color: isSelected ? color : BillifyColors.textSecondary,
+                ),
                 const SizedBox(width: 6),
-                Text(s.toUpperCase(),
-                    style: GoogleFonts.poppins(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                        color: isSelected
-                            ? color
-                            : BillifyColors.textSecondary)),
+                Text(
+                  s.toUpperCase(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: isSelected ? color : BillifyColors.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
