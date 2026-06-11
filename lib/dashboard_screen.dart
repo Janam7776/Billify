@@ -45,7 +45,7 @@ import 'main.dart'
     BillifyC,
     BillifyDialog;
 import 'expense_screens.dart' show ExpenseListScreen, AddExpenseScreen;
-import 'client_screens.dart' show DashboardRecentClients;
+import 'client_screens.dart' show DashboardRecentClients, showClientActionSheet;
 import 'web_layout.dart' show WebScaffold, WebLayoutService;
 import 'theme_controller.dart' show ThemeController;
 
@@ -353,7 +353,7 @@ class DashboardScreen extends StatelessWidget {
       child: WebScaffold(
         activeRoute: AppRoutes.dashboard,
         appBar: _buildAppBar(),
-        floatingActionButton: _buildFABs(),
+        floatingActionButton: _buildFABs(context),
         body: _buildBody(
           context: context,
           fmt: fmt,
@@ -398,7 +398,7 @@ class DashboardScreen extends StatelessWidget {
 
   // ── FABs ────────────────────────────────────────────────
 
-  Widget _buildFABs() {
+  Widget _buildFABs(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -420,10 +420,10 @@ class DashboardScreen extends StatelessWidget {
         const SizedBox(height: 8),
         FloatingActionButton.extended(
           heroTag: 'fab_client',
-          onPressed: () => _navTo(AppRoutes.clientAdd),
+          onPressed: () => showClientActionSheet(context),
           icon: const Icon(Icons.person_add_rounded, size: 18),
           label: Text(
-            'NEW CLIENT',
+            'CLIENT',
             style: GoogleFonts.poppins(
                 fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.2),
           ),

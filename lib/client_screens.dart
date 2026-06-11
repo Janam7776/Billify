@@ -16,7 +16,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import 'main.dart'
-    show BillifyColors, AppRoutes, BillifyDrawer, BillifyDialog, BillifyC;
+    show
+        BillifyColors,
+        AppRoutes,
+        BillifyDrawer,
+        BillifyDialog,
+        BillifyC,
+        SettingsController;
 import 'web_layout.dart' show WebScaffold;
 import 'theme_controller.dart' show ThemeController;
 import 'client_export_service.dart' show ClientExportSheet;
@@ -159,14 +165,16 @@ class ClientModel {
             ReelEntry.fromMap(d, 1),
           ] // fallback for legacy docs without reel fields
         : List.generate(reelCount, (i) => ReelEntry.fromMap(d, i + 1));
+    final createdAt =
+        (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
     return ClientModel(
       id: doc.id,
       name: d['name'] as String? ?? '',
       mobile: d['mobile'] as String? ?? '',
       clientCategory: d['clientCategory'] as String? ?? 'Mobile Shoot',
       customClientCategory: d['customClientCategory'] as String? ?? '',
-      createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      updatedAt: (d['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: createdAt,
+      updatedAt: (d['updatedAt'] as Timestamp?)?.toDate() ?? createdAt,
       reels: reels,
     );
   }
@@ -351,7 +359,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
     // ── Sort ────────────────────────────────────────────────
     switch (_sortOrder) {
       case 'oldest':
-        clients.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        clients.sort((a, b) => a.updatedAt.compareTo(b.updatedAt));
         break;
       case 'name_asc':
         clients.sort(
@@ -375,7 +383,7 @@ class _ClientListScreenState extends State<ClientListScreen> {
         break;
       case 'newest':
       default:
-        clients.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        clients.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
         break;
     }
     return clients;
@@ -422,10 +430,10 @@ class _ClientListScreenState extends State<ClientListScreen> {
       appBar: _buildAppBar(),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'fab_client',
-        onPressed: () => Get.toNamed(AppRoutes.clientAdd),
+        onPressed: () => showClientActionSheet(context),
         icon: const Icon(Icons.person_add_rounded, size: 18),
         label: Text(
-          'NEW CLIENT',
+          'CLIENT',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w800,
             fontSize: 10,
@@ -465,18 +473,22 @@ class _ClientListScreenState extends State<ClientListScreen> {
                     hasFilter: _hasFilter || _searchQuery.isNotEmpty,
                   );
                 }
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                  itemCount: clients.length,
-                  separatorBuilder: (_, __) => Container(
-                    height: 1,
-                    color: BillifyColors.outlineVariant.withOpacity(0.4),
-                  ),
-                  itemBuilder: (ctx, i) => _ClientCard(
-                    client: clients[i],
-                    onDelete: () => _deleteClient(clients[i]),
-                  ),
-                );
+                return Obx(() {
+                  final compact = SettingsController.to.compactCards.value;
+                  return ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                    itemCount: clients.length,
+                    separatorBuilder: (_, __) => Container(
+                      height: 1,
+                      color: BillifyColors.outlineVariant.withOpacity(0.4),
+                    ),
+                    itemBuilder: (ctx, i) => _ClientCard(
+                      client: clients[i],
+                      compact: compact,
+                      onDelete: () => _deleteClient(clients[i]),
+                    ),
+                  );
+                });
               },
             ),
           ),
@@ -519,6 +531,22 @@ class _ClientListScreenState extends State<ClientListScreen> {
         ),
       ),
       actions: [
+        Obx(() {
+          final compact = SettingsController.to.compactCards.value;
+          return IconButton(
+            tooltip: compact
+                ? 'Use detailed client tiles'
+                : 'Use compact client tiles',
+            icon: Icon(
+              compact ? Icons.view_agenda_outlined : Icons.view_stream_rounded,
+              color: compact
+                  ? ThemeController.to.primary
+                  : BillifyColors.textSecondary,
+              size: 20,
+            ),
+            onPressed: () => SettingsController.to.setCompactCards(!compact),
+          );
+        }),
         // ── Export button ───────────────────────────────────
         IconButton(
           tooltip: 'Export',
@@ -610,8 +638,8 @@ class _ClientListScreenState extends State<ClientListScreen> {
       dateRangeLabel = '$from – $to';
     }
     final sortLabels = {
-      'newest': 'Newest First',
-      'oldest': 'Oldest First',
+      'newest': 'Recently Updated',
+      'oldest': 'Least Recently Updated',
       'name_asc': 'Name A→Z',
       'name_desc': 'Name Z→A',
       'amount_asc': 'Amount ↑',
@@ -724,9 +752,14 @@ class _ClientListScreenState extends State<ClientListScreen> {
 
 class _ClientCard extends StatelessWidget {
   final ClientModel client;
+  final bool compact;
   final VoidCallback onDelete;
 
-  const _ClientCard({required this.client, required this.onDelete});
+  const _ClientCard({
+    required this.client,
+    required this.compact,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -738,7 +771,7 @@ class _ClientCard extends StatelessWidget {
     return InkWell(
       onTap: () => Get.toNamed(AppRoutes.clientDetail, arguments: client.id),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(compact ? 12 : 14),
         color: c.card,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -782,7 +815,7 @@ class _ClientCard extends StatelessWidget {
                         color: c.textSecondary,
                       ),
                     ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: compact ? 6 : 8),
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
@@ -790,10 +823,12 @@ class _ClientCard extends StatelessWidget {
                       for (final category in client.displayShootCategories)
                         _MiniChip(label: category),
                       _MiniChip(
-                        label: client.primaryReel.displayReelCategory,
+                        label: compact
+                            ? client.primaryReel.displayReelCategory
+                            : '${client.reelCount} reel${client.reelCount > 1 ? 's' : ''}',
                         color: ThemeController.to.primaryLight,
                       ),
-                      if (client.reelCount > 1)
+                      if (compact && client.reelCount > 1)
                         _MiniChip(
                           label:
                               '+${client.reelCount - 1} more reel${client.reelCount > 2 ? 's' : ''}',
@@ -801,6 +836,18 @@ class _ClientCard extends StatelessWidget {
                         ),
                     ],
                   ),
+                  if (!compact) ...[
+                    const SizedBox(height: 8),
+                    Column(
+                      children: [
+                        for (final reel in client.reels)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: _ReelSnapshot(reel: reel, formatter: fmt),
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -870,6 +917,126 @@ class _ClientCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ReelSnapshot extends StatelessWidget {
+  final ReelEntry reel;
+  final NumberFormat formatter;
+
+  const _ReelSnapshot({required this.reel, required this.formatter});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = BillifyC.of(context);
+    final statusColor = _paymentStatusColor(reel.paymentStatus);
+    final statusBg = _paymentStatusBg(reel.paymentStatus);
+    final projectDate = reel.projectStartDate == null
+        ? null
+        : DateFormat('dd MMM').format(reel.projectStartDate!);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: c.isDark ? BillifyColors.darkSurface : BillifyColors.surfaceLow,
+        border: Border.all(color: c.border, width: 0.5),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            color: ThemeController.to.primary.withValues(alpha: 0.12),
+            child: Center(
+              child: Text(
+                'R${reel.index}',
+                style: GoogleFonts.poppins(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                  color: ThemeController.to.primary,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  reel.displayShootCategory,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: c.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  reel.displayReelCategory,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.nunito(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: c.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '₹${formatter.format(reel.paymentAmount)}',
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: c.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (projectDate != null) ...[
+                    Text(
+                      projectDate,
+                      style: GoogleFonts.poppins(
+                        fontSize: 7,
+                        fontWeight: FontWeight.w700,
+                        color: c.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                  ],
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    color: statusBg,
+                    child: Text(
+                      reel.paymentStatus.toUpperCase(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 6.5,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.6,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1811,6 +1978,14 @@ class ClientDetailScreen extends StatelessWidget {
   Widget _buildProfile(BuildContext context, ClientModel client) {
     final c = BillifyC.of(context);
     final fmt = NumberFormat('#,##,###.##');
+    final completedReels = client.reels
+        .where((r) => r.paymentStatus.toLowerCase() == 'completed')
+        .length;
+    final openReels = client.reelCount - completedReels;
+    final openAmount = client.reels
+        .where((r) => r.paymentStatus.toLowerCase() != 'completed')
+        .fold<double>(0, (sum, r) => sum + r.paymentAmount);
+    final nextShoot = _nextProjectDate(client);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
@@ -1880,8 +2055,10 @@ class ClientDetailScreen extends StatelessWidget {
                       // Category + reel count badges
                       Wrap(
                         spacing: 8,
+                        runSpacing: 6,
                         children: [
-                          _heroBadge(client.displayCategory),
+                          for (final category in client.displayShootCategories)
+                            _heroBadge(category),
                           _heroBadge(
                             '${client.reelCount} REEL${client.reelCount > 1 ? 'S' : ''}',
                             icon: Icons.video_library_rounded,
@@ -1901,46 +2078,51 @@ class ClientDetailScreen extends StatelessWidget {
                   ),
                   color: c.card,
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              client.reelCount > 1
-                                  ? 'TOTAL (ALL REELS)'
-                                  : 'TOTAL PAYMENT',
-                              style: GoogleFonts.poppins(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.2,
-                                color: c.textSecondary,
-                              ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            client.reelCount > 1
+                                ? 'TOTAL (ALL REELS)'
+                                : 'TOTAL PAYMENT',
+                            style: GoogleFonts.poppins(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.2,
+                              color: c.textSecondary,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '₹${fmt.format(client.totalPaymentAmount)}',
-                              style: GoogleFonts.poppins(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w900,
-                                color: ThemeController.to.primary,
-                                letterSpacing: -1,
-                              ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '₹${fmt.format(client.totalPaymentAmount)}',
+                            style: GoogleFonts.poppins(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              color: ThemeController.to.primary,
+                              letterSpacing: -1,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      // Quick stats
-                      _QuickStat(
-                        label: 'REELS',
-                        value: '${client.reelCount}',
-                        color: ThemeController.to.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      _QuickStat(
-                        label: 'STATUS',
-                        value: client.paymentStatus.toUpperCase(),
-                        color: _paymentStatusColor(client.paymentStatus),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.end,
+                        children: [
+                          _QuickStat(
+                            label: 'OPEN',
+                            value: '$openReels',
+                            color: ThemeController.to.primary,
+                          ),
+                          _QuickStat(
+                            label: 'STATUS',
+                            value: client.paymentStatus.toUpperCase(),
+                            color: _paymentStatusColor(client.paymentStatus),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -1951,6 +2133,16 @@ class ClientDetailScreen extends StatelessWidget {
           const SizedBox(height: 16),
 
           // ── Reels ────────────────────────────────────────
+          _ProfileSnapshotCard(
+            totalReels: client.reelCount,
+            completedReels: completedReels,
+            openReels: openReels,
+            openAmount: openAmount,
+            nextShoot: nextShoot,
+            formatter: fmt,
+          ),
+          const SizedBox(height: 16),
+
           Row(
             children: [
               _SectionHeader(label: 'REEL BREAKDOWN'),
@@ -2067,6 +2259,26 @@ class ClientDetailScreen extends StatelessWidget {
     );
   }
 
+  DateTime? _nextProjectDate(ClientModel client) {
+    final now = DateTime.now();
+    final upcoming =
+        client.reels
+            .map((r) => r.projectStartDate)
+            .whereType<DateTime>()
+            .where((d) => !d.isBefore(now))
+            .toList()
+          ..sort();
+    if (upcoming.isNotEmpty) return upcoming.first;
+
+    final latest =
+        client.reels
+            .map((r) => r.projectStartDate)
+            .whereType<DateTime>()
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
+    return latest.isEmpty ? null : latest.first;
+  }
+
   Future<void> _confirmDeleteReel(
     BuildContext context,
     String clientId,
@@ -2162,6 +2374,190 @@ class ClientDetailScreen extends StatelessWidget {
 }
 
 // ── Reel Detail Card ──────────────────────────────────────
+class _ProfileSnapshotCard extends StatelessWidget {
+  final int totalReels;
+  final int completedReels;
+  final int openReels;
+  final double openAmount;
+  final DateTime? nextShoot;
+  final NumberFormat formatter;
+
+  const _ProfileSnapshotCard({
+    required this.totalReels,
+    required this.completedReels,
+    required this.openReels,
+    required this.openAmount,
+    required this.nextShoot,
+    required this.formatter,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = BillifyC.of(context);
+    final nextShootLabel = nextShoot == null
+        ? 'Not set'
+        : DateFormat('dd MMM, hh:mm a').format(nextShoot!);
+
+    return Container(
+      color: c.card,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionHeader(label: 'WORK SNAPSHOT'),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 140,
+                  child: _SnapshotMetric(
+                    icon: Icons.video_library_rounded,
+                    label: 'Total Reels',
+                    value: '$totalReels',
+                    color: ThemeController.to.primary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 140,
+                  child: _SnapshotMetric(
+                    icon: Icons.pending_actions_rounded,
+                    label: 'Open Reels',
+                    value: '$openReels',
+                    color: BillifyColors.unpaid,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 140,
+                  child: _SnapshotMetric(
+                    icon: Icons.check_circle_rounded,
+                    label: 'Completed',
+                    value: '$completedReels',
+                    color: BillifyColors.paid,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 140,
+                  child: _SnapshotMetric(
+                    icon: Icons.account_balance_wallet_rounded,
+                    label: 'Open Amount',
+                    value: '₹${formatter.format(openAmount)}',
+                    color: ThemeController.to.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            color: c.isDark
+                ? BillifyColors.darkSurface
+                : BillifyColors.surfaceLow,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.event_available_rounded,
+                  size: 16,
+                  color: ThemeController.to.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'NEXT SHOOT',
+                    style: GoogleFonts.poppins(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                      color: c.textSecondary,
+                    ),
+                  ),
+                ),
+                Text(
+                  nextShootLabel,
+                  style: GoogleFonts.nunito(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: c.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SnapshotMetric extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _SnapshotMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = BillifyC.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      color: c.isDark ? BillifyColors.darkSurface : BillifyColors.surfaceLow,
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            color: color.withValues(alpha: 0.12),
+            child: Icon(icon, size: 15, color: color),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: c.textPrimary,
+                  ),
+                ),
+                Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 7,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.7,
+                    color: c.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ReelDetailCard extends StatefulWidget {
   final ReelEntry reel;
   final int reelNumber;
@@ -2197,6 +2593,9 @@ class _ReelDetailCardState extends State<_ReelDetailCard> {
     final statusBg = _paymentStatusBg(widget.reel.paymentStatus);
     final fmt = NumberFormat('#,##,###.##');
     final c = BillifyC.of(context);
+    final projectLabel = widget.reel.projectStartDate == null
+        ? null
+        : DateFormat('dd MMM, hh:mm a').format(widget.reel.projectStartDate!);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -2233,14 +2632,31 @@ class _ReelDetailCardState extends State<_ReelDetailCard> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      widget.reel.displayReelCategory,
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: c.textPrimary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.reel.displayShootCategory,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: c.textPrimary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          projectLabel == null
+                              ? widget.reel.displayReelCategory
+                              : '${widget.reel.displayReelCategory} • $projectLabel',
+                          style: GoogleFonts.nunito(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: c.textSecondary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
                   ),
                   // Amount
@@ -2406,27 +2822,33 @@ class _QuickStat extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: [
-      Text(
-        value,
-        style: GoogleFonts.poppins(
-          fontSize: 14,
-          fontWeight: FontWeight.w900,
-          color: color,
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(minWidth: 64, maxWidth: 150),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.poppins(
+            fontSize: value.length > 9 ? 11 : 14,
+            fontWeight: FontWeight.w900,
+            color: color,
+          ),
         ),
-      ),
-      Text(
-        label,
-        style: GoogleFonts.poppins(
-          fontSize: 8,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
-          color: BillifyColors.textSecondary,
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 8,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+            color: BillifyColors.textSecondary,
+          ),
         ),
-      ),
-    ],
+      ],
+    ),
   );
 }
 
@@ -2577,8 +2999,8 @@ class _ClientFilterSheetState extends State<_ClientFilterSheet> {
   String _sortOrder = 'newest';
 
   static const _kSortOptions = [
-    ('newest', 'Newest First', Icons.arrow_downward_rounded),
-    ('oldest', 'Oldest First', Icons.arrow_upward_rounded),
+    ('newest', 'Recently Updated', Icons.arrow_downward_rounded),
+    ('oldest', 'Least Recently Updated', Icons.arrow_upward_rounded),
     ('name_asc', 'Name A → Z', Icons.sort_by_alpha_rounded),
     ('name_desc', 'Name Z → A', Icons.sort_by_alpha_rounded),
     ('amount_desc', 'Amount High→Low', Icons.trending_down_rounded),
@@ -3595,6 +4017,354 @@ class _PaymentStatusSelector extends StatelessWidget {
       }).toList(),
     );
   }
+}
+
+// ════════════════════════════════════════════════════════════
+//  CLIENT ACTION SHEET & EXISTING CLIENT PICKER
+// ════════════════════════════════════════════════════════════
+
+void showClientActionSheet(BuildContext context) {
+  final c = BillifyC.of(context);
+  final primary = ThemeController.to.primary;
+  
+  showDialog(
+    context: context,
+    builder: (ctx) => Dialog(
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(height: 3, color: primary),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      color: primary.withOpacity(0.1),
+                      child: Icon(Icons.add_circle_outline_rounded, color: primary, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'ADD REEL TO...',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                          color: c.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _ActionOption(
+                  icon: Icons.person_add_rounded,
+                  label: 'NEW CLIENT',
+                  subtitle: 'Create a brand new client profile',
+                  color: primary,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Get.toNamed(AppRoutes.clientAdd);
+                  },
+                ),
+                const SizedBox(height: 12),
+                _ActionOption(
+                  icon: Icons.person_search_rounded,
+                  label: 'EXISTING CLIENT',
+                  subtitle: 'Add to an already saved profile',
+                  color: const Color(0xFF536073),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showExistingClientPicker(context);
+                  },
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                    ),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text(
+                      'CANCEL',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        letterSpacing: 1.2,
+                        color: c.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ActionOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  
+  const _ActionOption({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: BillifyColors.surfaceLow,
+          border: Border(left: BorderSide(color: color, width: 3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              color: color.withOpacity(0.1),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.0,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.nunito(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+void _showExistingClientPicker(BuildContext context) {
+  final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+  final c = BillifyC.of(context);
+  final primary = ThemeController.to.primary;
+  
+  showDialog(
+    context: context,
+    builder: (ctx) {
+      String searchQuery = '';
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return Dialog(
+            backgroundColor: c.surface,
+            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(height: 3, color: primary),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            color: primary.withOpacity(0.1),
+                            child: Icon(Icons.person_search_rounded, color: primary, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'SELECT CLIENT',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.8,
+                                color: c.textPrimary,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.pop(ctx),
+                            color: c.textSecondary,
+                            iconSize: 20,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        onChanged: (val) {
+                          setState(() {
+                            searchQuery = val.trim().toLowerCase();
+                          });
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Search by name or mobile...',
+                          prefixIcon: Icon(Icons.search_rounded, color: primary, size: 16),
+                          filled: true,
+                          fillColor: BillifyColors.surfaceLow,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                        ),
+                        style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(uid)
+                        .collection('clients')
+                        .orderBy('createdAt', descending: true)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Center(child: CircularProgressIndicator(color: primary)),
+                        );
+                      }
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Center(
+                            child: Text('No existing clients found.', style: GoogleFonts.nunito(color: c.textSecondary)),
+                          ),
+                        );
+                      }
+                      
+                      var docs = snapshot.data!.docs;
+                      if (searchQuery.isNotEmpty) {
+                        docs = docs.where((doc) {
+                          final name = (doc.data() as Map<String, dynamic>)['name']?.toString().toLowerCase() ?? '';
+                          final mobile = (doc.data() as Map<String, dynamic>)['mobile']?.toString().toLowerCase() ?? '';
+                          return name.contains(searchQuery) || mobile.contains(searchQuery);
+                        }).toList();
+                      }
+                      
+                      if (docs.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Center(
+                            child: Text('No matches found.', style: GoogleFonts.nunito(color: c.textSecondary)),
+                          ),
+                        );
+                      }
+                      
+                      return ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: docs.length,
+                        separatorBuilder: (_, __) => Divider(height: 1, color: BillifyColors.outlineVariant.withOpacity(0.4)),
+                        itemBuilder: (context, index) {
+                          final doc = docs[index];
+                          final client = ClientModel.fromDoc(doc);
+                          return InkWell(
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              Get.to(
+                                () => ClientReelFormScreen(
+                                  clientId: client.id,
+                                  reelIndex: client.reelCount + 1,
+                                ),
+                                transition: Transition.rightToLeft,
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    color: primary.withOpacity(0.12),
+                                    child: Center(
+                                      child: Text(
+                                        client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w800,
+                                          color: primary,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(client.name, style: GoogleFonts.poppins(fontWeight: FontWeight.w700, color: c.textPrimary, fontSize: 13)),
+                                        if (client.mobile.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(client.mobile, style: GoogleFonts.nunito(color: c.textSecondary, fontSize: 11)),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(Icons.chevron_right_rounded, color: BillifyColors.textSecondary, size: 20),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        }
+      );
+    },
+  );
 }
 
 // ════════════════════════════════════════════════════════════
